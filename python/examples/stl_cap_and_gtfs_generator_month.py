@@ -1,4 +1,5 @@
 from multimodalsim.reader.gtfs_generator import GTFSGenerator
+
 from multimodalsim.reader.available_connections_extractor import AvailableConnectionsExtractor
 from multimodalsim.reader.requests_generator import CAPRequestsGenerator
 import logging
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 ### This file also generates the requests and available connections for the whole month of November 2019 day by day
 if __name__ == '__main__':
     # Import STL files (personal) : Source file (replace with your own path)
+    # répertoires des donnéée
     path = r"D:\donnees\Donnees_PASSAGE_ARRET_VLV_2019-11-01_2019-11-30.csv"
     passage_arret_file_path_list = [path]
     # Destination folder
@@ -49,6 +51,7 @@ if __name__ == '__main__':
     ##  Extract available connections from CAP Data (do once and then comment out)
     ## If you want to change release_time_delta, ready_time_delta, due_time_delta used in the optimization, you have to regenerate this part.
     logging.getLogger().setLevel(logging.DEBUG)
+    #Date du mois de novem
     dates = ["20191101","20191102","20191103","20191104","20191105","20191106","20191107","20191108","20191109","20191110","20191111","20191112","20191113","20191114","20191115","20191116","20191117","20191118","20191119","20191120","20191121","20191122","20191123","20191124","20191125","20191126","20191127","20191128","20191129","20191130"]
     for dateshort in dates:
         ## Get the date and the paths to all the files
