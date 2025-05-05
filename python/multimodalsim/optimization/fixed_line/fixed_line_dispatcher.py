@@ -24,9 +24,26 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 class FixedLineDispatcher(Dispatcher):
+    """
+    Classe principale pour la gestion des bus sur des lignes fixes.
+    Hérite de la classe Dispatcher et implémente des fonctionnalités spécifiques pour les lignes de bus fixes.
+    """
 
     def __init__(self, config=None, ss = False, sp = False, algo = 0, routes_to_optimize_names = [],
                  output_folder_path = None, is_corridor = False, transfer_hubs = []):
+        """
+        Initialise le dispatcher avec les paramètres de configuration.
+        
+        Args:
+            config: Configuration du dispatcher
+            ss: Booléen indiquant si le skip-stop est activé
+            sp: Booléen indiquant si l'accélération est activée
+            algo: Algorithme d'optimisation à utiliser
+            routes_to_optimize_names: Liste des noms des itinéraires à optimiser
+            output_folder_path: Chemin du dossier de sortie
+            is_corridor: Booléen indiquant si c'est un corridor
+            transfer_hubs: Liste des hubs de transfert
+        """
         super().__init__()
         self.__config = FixedLineDispatcherConfig() if config is None else config
         self.__algo = algo
@@ -45,14 +62,14 @@ class FixedLineDispatcher(Dispatcher):
         self.__tactics_file_path = None
         self.__error_file_path = None
         if output_folder_path is not None:
-            #create file to log all tactics
+            # Crée un fichier pour enregistrer toutes les tactiques
             self.__tactics_file_path = os.path.join(output_folder_path, "tactics.txt")
             with open(self.__tactics_file_path, "w") as f:
                 f.write("Tactics file path created at {}\n".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
                 f.write('route_name,trip_id,stop_id,current_time,speedup,skip_stop,hold,max_departure_time,error\n')
             f.close()
 
-            #Create file to log all errors
+            # Crée un fichier pour enregistrer toutes les erreurs
             self.__error_file_path = os.path.join(output_folder_path, "OSO_algorithm_errors.txt")
             with open(self.__error_file_path, "w") as f:
                 f.write("Error file path created at {}\n".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
@@ -60,101 +77,144 @@ class FixedLineDispatcher(Dispatcher):
 
     @property
     def algo(self):
+        """Retourne l'algorithme utilisé."""
         return self.__algo
     
     @property
     def speedup_factor(self):
+        """Retourne le facteur d'accélération."""
         return self.__speedup_factor
     
     @speedup_factor.setter
     def speedup_factor(self, sf):
+        """Définit le facteur d'accélération."""
         self.__speedup_factor = sf
     
     @property
     def walking_speed(self):
+        """Retourne la vitesse de marche."""
         return self.__general_parameters["walking_speed"]
     
     @property
     def skip_stop(self):
+        """Retourne si le skip-stop est activé."""
         return self.__skip_stop
     
     @skip_stop.setter
     def skip_stop(self, ss):
+        """Définit si le skip-stop est activé."""
         self.__skip_stop = ss
     
     @property
     def general_parameters(self):
+        """Retourne les paramètres généraux."""
         return self.__general_parameters
     
     @property
     def algo_parameters(self):
+        """Retourne les paramètres de l'algorithme."""
         return self.__algo_parameters
     
     @property
     def folder_name_addendum(self):
+        """Retourne l'addendum du nom du dossier."""
         return self.__algo_parameters["folder_name_addendum"]
     
     @property
     def horizon(self):
+        """Retourne l'horizon de temps."""
         return self.__horizon
     
     @property
     def Data(self):
+        """Retourne les données."""
         return self.__Data
     
     @Data.setter
     def Data(self, data):
+        """Définit les données."""
         self.__Data = data
 
     @property
     def route_name(self):
+        """Retourne le nom de la route."""
         return self.__route_name
     
     @route_name.setter
     def route_name(self, name):
+        """Définit le nom de la route."""
         self.__route_name = name
     
     @property
     def routes_to_optimize_names(self):
+        """Retourne les noms des routes à optimiser."""
         return self.__routes_to_optimize_names
     
     @property
     def is_corridor(self):
+        """Retourne si c'est un corridor."""
         return self.__is_corridor
     
     @property
     def transfer_hubs(self):
+        """Retourne les hubs de transfert."""
         return self.__transfer_hubs
     
     def prepare_input(self, state):
-        """Before optimizing, we extract the legs and the routes that we want
-        to be considered by the optimization algorithm. For the
-        FixedLineDispatcher, we want to keep only the legs that have not
-        been assigned to any route yet.
         """
-        # The next legs that have not been assigned to any route yet.
+        Prépare les entrées pour l'optimisation en extrayant les legs non assignés et les routes.
+        
+        Args:
+            state: État actuel du système
+            
+        Returns:
+            tuple: (selected_next_legs, selected_routes)
+                - selected_next_legs: Liste des legs non assignés
+                - selected_routes: Liste des routes disponibles
+        """
+        # Les prochains legs qui n'ont pas encore été assignés à une route
         selected_next_legs = state.non_assigned_next_legs
 
-        # All the routes
+        # Toutes les routes
         selected_routes = state.route_by_vehicle_id.values()
 
         return selected_next_legs, selected_routes
     
     def add_route_to_optimized_route_plans(self, optimized_route_plans, optimal_route, leg):
-        # Check if this route is already part of an optimized route plan.
-        # If it is, we don't need to create a new optimized route plan.
+        """
+        Ajoute une route aux plans de itinéraires optimisés.
+        
+        Args:
+            optimized_route_plans: Liste des plans de itinéraires optimisés
+            optimal_route: Route optimale à ajouter
+            leg: Leg à assigner
+            
+        Returns:
+            list: Liste mise à jour des plans de itinéraires optimisés
+        """
+        # Vérifie si cette route fait déjà partie d'un plan de route optimisé
         optimized_route_plan = next((optimized_route_plans.pop(i) for i, optimized_route_plan in enumerate(optimized_route_plans) if optimized_route_plan.route.vehicle.id == optimal_route.vehicle.id), None)
         if optimized_route_plan is None:
             optimized_route_plan = OptimizedRoutePlan(optimal_route)
-            # Use the current and next stops of the route.
+            # Utilise les arrêts actuels et suivants de la route
             optimized_route_plan.copy_route_stops()
         optimized_route_plan.assign_leg(leg)
         optimized_route_plans.append(optimized_route_plan)
         return optimized_route_plans
 
     def smartcard_optimize(self, selected_next_legs, selected_routes, state, queue):
-        """Each selected next leg is assigned to the route the passenger boarded in the historical smartcard data.
-           If that bus has already passed the origin stop, the passenger has to wait for the next bus of the same line."""
+        """
+        Optimise l'assignation des legs aux routes en utilisant les données de carte à puce.
+        
+        Args:
+            selected_next_legs: Liste des legs à assigner
+            selected_routes: Liste des routes disponibles
+            state: État actuel du système
+            queue: File d'attente des événements
+            
+        Returns:
+            list: Liste des plans de route optimisés
+        """
         current_time = state.current_time
         optimized_route_plans = []
         for leg in selected_next_legs:
@@ -170,10 +230,10 @@ class FixedLineDispatcher(Dispatcher):
                     optimized_route_plans = self.add_route_to_optimized_route_plans(optimized_route_plans, smartcard_route, leg)
             else:
                 smartcard_route = next((route for route in selected_routes if route.vehicle.id == cap_vehicle_id), None)
-                if smartcard_route is not None: # The smartcard_route is initialized in the environment, else the passenger has to wait until the route is initialized.
-                    if self.__find_smartcard_route_for_leg(leg, smartcard_route, current_time): # The cap_vehicle has not passed the origin stop yet, passenger can board.
+                if smartcard_route is not None: # La smartcard_route est initialisée dans l'environnement, sinon le passager doit attendre que la route soit initialisée
+                    if self.__find_smartcard_route_for_leg(leg, smartcard_route, current_time): # Le cap_vehicle n'a pas encore passé l'arrêt d'origine, le passager peut monter
                         optimized_route_plans = self.add_route_to_optimized_route_plans(optimized_route_plans, smartcard_route, leg)
-                    else: # The cap_vehicle has passed the origin stop, passenger has to wait for the next bus of the same line.
+                    else: # Le cap_vehicle a passé l'arrêt d'origine, le passager doit attendre le prochain bus de la même ligne
                         next_vehicle_id = queue.env.next_vehicles[cap_vehicle_id]
                         next_route = next((route for route in selected_routes if route.vehicle.id == next_vehicle_id), None)
                         if (next_route is not None) and self.__find_smartcard_route_for_leg(leg, next_route, current_time):
@@ -182,6 +242,17 @@ class FixedLineDispatcher(Dispatcher):
         return optimized_route_plans
     
     def __find_optimal_route_for_leg(self, leg, selected_routes, current_time):
+        """
+        Trouve la route optimale pour un leg donné.
+        
+        Args:
+            leg: Leg à assigner
+            selected_routes: Liste des routes disponibles
+            current_time: Temps actuel
+            
+        Returns:
+            Route: Route optimale pour le leg
+        """
         origin_stop_id = leg.origin.label
         destination_stop_id = leg.destination.label
 
@@ -203,6 +274,17 @@ class FixedLineDispatcher(Dispatcher):
         return optimal_route
 
     def __find_smartcard_route_for_leg(self, leg, route, current_time):
+        """
+        Vérifie si une route est valide pour un leg donné.
+        
+        Args:
+            leg: Leg à vérifier
+            route: Route à vérifier
+            current_time: Temps actuel
+            
+        Returns:
+            bool: True si la route est valide, False sinon
+        """
         origin_stop_id = leg.origin.label
         destination_stop_id = leg.destination.label
         origin_departure_time, destination_arrival_time = \
@@ -218,6 +300,17 @@ class FixedLineDispatcher(Dispatcher):
 
     def __get_origin_departure_time_and_destination_arrival_time(
             self, route, origin_stop_id, destination_stop_id):
+        """
+        Récupère les temps de départ et d'arrivée pour une route donnée.
+        
+        Args:
+            route: Route à analyser
+            origin_stop_id: ID de l'arrêt d'origine
+            destination_stop_id: ID de l'arrêt de destination
+            
+        Returns:
+            tuple: (origin_departure_time, destination_arrival_time)
+        """
         origin_stop = self.__get_stop_by_stop_id(origin_stop_id, route)
         destination_stop = self.__get_stop_by_stop_id(destination_stop_id,
                                                       route)       
@@ -231,6 +324,16 @@ class FixedLineDispatcher(Dispatcher):
         return origin_departure_time, destination_arrival_time
 
     def __get_stop_by_stop_id(self, stop_id, route):
+        """
+        Trouve un arrêt dans une route par son ID.
+        
+        Args:
+            stop_id: ID de l'arrêt à trouver
+            route: Route dans laquelle chercher
+            
+        Returns:
+            Stop: Arrêt trouvé ou None
+        """
         found_stop = None
         if route.current_stop is not None and stop_id \
                 == route.current_stop.location.label:
@@ -528,71 +631,71 @@ class FixedLineDispatcher(Dispatcher):
         return 'walk' in input_string
     
     def OSO_algorithm(self, state): 
-        """Online stochastic optimization algorithm for the bus dispatcher.
-        Inputs:
-            - state: State object, the current state of the environment.
+        """Algorithme d'optimisation stochastique en ligne pour le dispatcher de bus.
+        Entrées:
+            - state: Objet State, l'état actuel de l'environnement.
         
-        Outputs:
-            - sp: boolean, the result of the OSO algorithm for the speedup tactic.
-            - ss: boolean, the result of the OSO algorithm for the skip-stop tactic.
-            - h_and_time: tuple, the result of the OSO algorithm for the hold tactic and the corresponding end of hold time
-                (The output hold time is already treated in the OSO algorithm)"""
+        Sorties:
+            - sp: booléen, résultat de l'algorithme OSO pour la tactique d'accélération.
+            - ss: booléen, résultat de l'algorithme OSO pour la tactique de skip-stop.
+            - h_and_time: tuple, résultat de l'algorithme OSO pour la tactique de hold et le temps de fin de hold correspondant
+                (Le temps de hold en sortie est déjà traité dans l'algorithme OSO)"""
+        # Récupère les routes principales actuelles et suivantes
         route = self.get_route_by_vehicle_id(state, state.main_line)
         next_route = self.get_route_by_vehicle_id(state, state.next_main_line)
+        
+        # Vérifie si la route doit être optimisée
         enter_optimization_bool = self.route_name in self.routes_to_optimize_names
+        
+        # Vérifie si la route contient un hub de transfert
         if len(self.transfer_hubs) > 0:
             is_transfer_hub_in_route = False
             if route is not None:
-                # Check if any stop.location.label is in transfer hubs
+                # Vérifie si un arrêt est dans les hubs de transfert
                 for stop in route.next_stops:
                     if int(stop.location.label) in self.transfer_hubs:
                         is_transfer_hub_in_route = True
                         break
-                # is_transfer_hub_in_route = any([int(stop.location.label) in self.transfer_hubs for stop in route.next_stops])
             enter_optimization_bool = enter_optimization_bool and is_transfer_hub_in_route
-            # if enter_optimization_bool:
-            #     print('Entering transfer hub radius for route {} and hub {}.'.format(self.route_name, int(stop.location.label)))
 
-        ### If re-optimizing at arrival, current stop is not None. If optimizing at departure, current stop is None.
+        # Vérifie les conditions pour entrer dans l'optimisation
+        # Si on ré-optimise à l'arrivée, current_stop n'est pas None. Si on optimise au départ, current_stop est None.
         if (not enter_optimization_bool) or \
            (self.algo == 0) or \
            (route is None) or (next_route is None) or \
            (route.current_stop is None) or \
            len(route.next_stops) == 0:
-            # logger.info("Algo={}, Main route= {}, Next bus on main route = {}, bus has not departed yet = {}, number next stops = {}".format(str(self.algo), route is None, next_route is None, route.current_stop is not None, len(route.next_stops)==0))
             return(False, False, (False, -1))
         
-        # Get bus trip ids for the main line and the next main line
+        # Récupère les IDs des trajets de bus
         bus_trip_id = route.vehicle.id
         bus_next_trip_id = next_route.vehicle.id
 
-        # get first stop on first main line bus
-        stop = route.next_stops[0] # Next stops are the same for re-opt at arrival or departure
+        # Récupère le premier arrêt sur la première ligne principale
+        stop = route.next_stops[0] # Les prochains arrêts sont les mêmes pour la ré-opt à l'arrivée ou au départ
         stop_id = int(stop.location.label)
 
-        # Get all stops in horizon for both routes
+        # Récupère tous les arrêts dans l'horizon pour les deux routes
         stops = route.next_stops[: min(self.horizon, len(route.next_stops))]
         last_stop_id = stops[-1].location.label
         stops_second = next_route.get_next_route_stops(last_stop_id)
-        
-        # logger.info('Main line is {} and next main line is {} and first stop is {}, last stop is {}'.format(route.vehicle.id, next_route.vehicle.id, stop_id, last_stop_id))
 
-        #Get initial flows for both buses
+        # Récupère les flux initiaux pour les deux bus
         initial_flows = {}
-        initial_flows[bus_trip_id] = int(len(route.onboard_legs)) # Onboard legs are the same for re-opt at arrival or departure (alighting passengers already alighted)
+        initial_flows[bus_trip_id] = int(len(route.onboard_legs)) # Les legs à bord sont les mêmes pour la ré-opt à l'arrivée ou au départ (les passagers descendus sont déjà descendus)
         initial_flows[bus_next_trip_id] = int(len(next_route.onboard_legs))
 
-        # Get departure times from last visited stop before the control horizon
+        # Récupère les temps de départ du dernier arrêt visité avant l'horizon de contrôle
         last_departure_times = {}
-        # At this point in time tactics for the current stop have been decided and applied so the departure time is known. 
-        last_departure_times[bus_trip_id] = route.current_stop.departure_time # we know current stop is not None.
+        # À ce moment, les tactiques pour l'arrêt actuel ont été décidées et appliquées
+        last_departure_times[bus_trip_id] = route.current_stop.departure_time # on sait que current_stop n'est pas None
         last_departure_times[bus_next_trip_id] = next_route.previous_stops[-1].departure_time if next_route.previous_stops != [] else next_route.next_stops[0].arrival_time -1
         if last_departure_times[bus_trip_id] == last_departure_times[bus_next_trip_id]:
             last_departure_times[bus_next_trip_id]+=1
 
-        # Estimate arrival time of transfers at stops in the control horizon
+        # Estime les temps d'arrivée des transferts aux arrêts dans l'horizon de contrôle
         transfer_times = {}
-        time_to_prev_next = 900 # Time interval before the arrival at the stop, and after the departure from stop for which to consider transfers (using current delay)
+        time_to_prev_next = 900 # Intervalle de temps avant l'arrivée à l'arrêt, et après le départ de l'arrêt pour considérer les transferts (en utilisant le retard actuel)
         transfer_times[bus_trip_id] = self.get_transfer_stop_times(state = state,
                                                                 stops = stops,
                                                                 type_transfer_arrival_time = self.algo_parameters['type_transfer_arrival_time'],
@@ -603,17 +706,18 @@ class FixedLineDispatcher(Dispatcher):
                                                                     type_transfer_arrival_time = self.algo_parameters['type_transfer_arrival_time'],
                                                                     time_to_prev=time_to_prev_next,
                                                                     time_to_next=time_to_prev_next)
-        # Define the last stop at which tactics are allowed
+        
+        # Définit le dernier arrêt où les tactiques sont autorisées
         last_stop = self.allow_tactics_at_stops(state, stops, transfer_times[route.vehicle.id])
 
-        # Create a list to store the runtimes of the scenarios (for statistics and efficiency purposes)
+        # Crée une liste pour stocker les temps d'exécution des scénarios
         runtimes = []
 
-        # Create dictionnary saving tactics used in all scenarios
-        if self.__algo == 2: # Regret Algorithm
+        # Crée un dictionnaire pour sauvegarder les tactiques utilisées dans tous les scénarios
+        if self.__algo == 2: # Algorithme Regret
             tactic_regrets_dict = self.create_tactics_dict(last_stop)
 
-        # Start the simulation
+        # Démarre la simulation
         G_gen = None
         i = 0
         j_try = 0
@@ -623,7 +727,7 @@ class FixedLineDispatcher(Dispatcher):
                     j_try += 1
                     runtime_start = time.time()
 
-                    # Step a: Generate senario j_try
+                    # Étape a: Génère le scénario j_try
                     bus_trips, transfers = self.Generate_scenario(main_route = route,
                                                                   next_route = next_route, 
                                                                   stops = stops, 
@@ -631,7 +735,7 @@ class FixedLineDispatcher(Dispatcher):
                                                                   last_stop = last_stop,
                                                                   transfer_times = transfer_times
                                                                   )
-                    # Step b: Build graph (integrating all allowed tactics) from generated scenario
+                    # Étape b: Construit le graphe (intégrant toutes les tactiques autorisées) à partir du scénario généré
                     G_gen = Graph.build_graph_with_tactics(first_trip_id = bus_trip_id,
                                                            bus_trips = bus_trips,
                                                             transfers = transfers,
@@ -643,13 +747,14 @@ class FixedLineDispatcher(Dispatcher):
                                                             global_skip_stop_is_allowed = self.skip_stop,
                                                             simu = True,
                                                             last_stop = int(last_stop.location.label) if last_stop != -1 else -1)
-                    # G_gen.display_graph(display_flows = False, name = 'Test_graph')
 
-                    # Step c: Build and solve model based on graph, and get solution
+                    # Étape c: Construit et résout le modèle basé sur le graphe, et obtient la solution
                     max_departure_time, hold, speedup, skip_stop, bus_flows, optimal_value, runtime = self.get_solution_for_graph(G_gen,
                                                                                                                                   stop_id,
                                                                                                                                   bus_trip_id)
 
+
+                    # Étape d: Met à jour le dictionnaire des tactiques
                     # Step d: Update tactics dictionary
                     if self.algo == 2: # Regret Algorithm
                         tactic_regrets_dict = self.update_tactics_dict_regret(tactic_regrets_dict,
@@ -698,7 +803,8 @@ class FixedLineDispatcher(Dispatcher):
                 f.close()
                 return(False, False, (False, -1))
                
-        # Extract optimal tactics from the solution (or tactics dictionary)
+        # Extrait les tactiques optimales de la solution (ou du dictionnaire des tactiques)
+        
         if self.algo == 2: # Regret
             max_departure_time, hold, speedup, skip_stop, = self.choose_tactic(tactic_regrets_dict, last_stop)
         if self.__tactics_file_path is not None:
