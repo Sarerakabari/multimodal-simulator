@@ -4,12 +4,13 @@ import os
 
 
 class DataCollectorConfig(Config):
-    def __init__(self,
-                 config_file=os.path.join(os.path.dirname(__file__),
-                                          "ini/data_collector.ini")):
+    def __init__(
+            self,
+            config_file: str = os.path.join(os.path.dirname(__file__),
+                                            "ini/data_collector.ini")) -> None:
         super().__init__(config_file)
 
-    def get_vehicles_columns(self):
+    def get_vehicles_columns(self) -> dict:
         vehicles_columns = {
             "id": self._config_parser["vehicles"]["id"],
             "time": self._config_parser["vehicles"]["time"],
@@ -33,7 +34,7 @@ class DataCollectorConfig(Config):
 
         return vehicles_columns
 
-    def get_trips_columns(self):
+    def get_trips_columns(self) -> dict:
         trips_columns = {
             "id": self._config_parser["trips"]["id"],
             "time": self._config_parser["trips"]["time"],

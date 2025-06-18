@@ -12,20 +12,18 @@ from multimodalsim.config.gtfs_generator_config import GTFSGeneratorConfig
 
 logger = logging.getLogger(__name__)
 
+
 class GTFSGenerator:
-###This class reads files containing the passage_arret data from the STL and generates the corresponding GTFS-type files.
-### Input files are named Donnees_PASSAGE_ARRET_VLV_2019-11-01_2019-11-30.scv.
-### Output files for each day are saved in a folder named after the date, in the gtfs_folder folder.
-    def __init__(self, config=None):
-        config = GTFSGeneratorConfig() if config is None else config
+    def __init__(self,
+                 config: Optional[str | GTFSGeneratorConfig] = None) -> None:
         self.__load_config(config)
 
         self.__passage_arret_file_path_list = None
         self.__stop_times_df = None
         self.__stops_df = None
 
-    def build_calendar_dates(self, passage_arret_file_path_list,
-                             gtfs_folder=None):
+    def build_calendar_dates(self, passage_arret_file_path_list: list[str],
+                             gtfs_folder: Optional[str] = None):
 
         self.__passage_arret_file_path_list = passage_arret_file_path_list
 
@@ -50,7 +48,8 @@ class GTFSGenerator:
             self.__save_to_file(calendar_dates_df, "calendar_dates.txt",
                                 gtfs_folder)
 
-    def build_trips(self, passage_arret_file_path_list, gtfs_folder=None):
+    def build_trips(self, passage_arret_file_path_list: list[str],
+                    gtfs_folder: Optional[str] = None):
 
         self.__passage_arret_file_path_list = passage_arret_file_path_list
 
@@ -81,7 +80,8 @@ class GTFSGenerator:
 
         return trips_df
 
-    def build_stops(self, passage_arret_file_path_list, gtfs_folder=None):
+    def build_stops(self, passage_arret_file_path_list: list[str],
+                    gtfs_folder: Optional[str] = None):
 
         self.__passage_arret_file_path_list = passage_arret_file_path_list
 
@@ -104,9 +104,10 @@ class GTFSGenerator:
                                 gtfs_folder)
 
         return stops_df
- 
-    def build_stop_times(self, passage_arret_file_path_list, gtfs_folder=None,
-                         shape_dist_traveled=False):
+
+    def build_stop_times(self, passage_arret_file_path_list: list[str],
+                         gtfs_folder: Optional[str] = None,
+                         shape_dist_traveled: bool = False):
 
         self.__passage_arret_file_path_list = passage_arret_file_path_list
 
@@ -974,6 +975,7 @@ class GTFSGenerator:
             - full_stop_times_df["departure_time"]
         full_stop_times_df = full_stop_times_df[full_stop_times_df["travel_time"] > 0]
 
+        #
         full_stop_times_grouped_by_voy_id = \
             full_stop_times_df.groupby("trip_id")
         full_stop_times_df["prev_arrival_times"] = \

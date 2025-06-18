@@ -1,31 +1,42 @@
 import logging
+from typing import Optional
+
+import multimodalsim.simulator.environment as environment
+from multimodalsim.simulator.event import Event
+from multimodalsim.statistics.data_analyzer import DataAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
 class Visualizer(object):
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def visualize_environment(self, env, current_event=None, event_index=None,
-                              event_priority=None):
+    def visualize_environment(self, env: 'environment.Environment',
+                              current_event: Optional[Event] = None,
+                              event_index: Optional[int] = None,
+                              event_priority: Optional[int] = None) -> None:
         pass
 
 
 class ConsoleVisualizer(Visualizer):
 
-    def __init__(self, data_analyzer=None, stats_delta_time=10):
+    def __init__(self, data_analyzer: Optional[DataAnalyzer] = None,
+                 stats_delta_time: float = 10) -> None:
         super().__init__()
         self.__data_analyzer = data_analyzer
         self.__last_time = None
         self.__stats_time = 0
         self.__stats_delta_time = stats_delta_time
 
-    def visualize_environment(self, env, current_event=None, event_index=None,
-                              event_priority=None):
+    def visualize_environment(self, env: 'environment.Environment',
+                              current_event: Optional[Event] = None,
+                              event_index: Optional[int] = None,
+                              event_priority: Optional[int] = None) -> None:
 
         if self.__last_time is None or env.current_time != self.__last_time:
+            logger.info("current_time={}".format(env.current_time))
             self.__last_time = env.current_time
 
         if logger.parent.level == logging.DEBUG:
@@ -135,6 +146,9 @@ class ConsoleVisualizer(Visualizer):
                     current_event, event_priority))
 
     def __print_statistics(self):
+
+        stats = self.__data_analyzer.get_statistics()
+        logger.info("Statistics: {}".format(stats))
 
         vehicles_stats = self.__data_analyzer.get_vehicles_statistics()
         logger.info(vehicles_stats)

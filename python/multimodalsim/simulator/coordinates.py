@@ -1,40 +1,44 @@
 import logging
 import csv
 import math
+from typing import Optional
 
 import requests
 import polyline
 import numpy as np
-from ast import literal_eval
 
 from multimodalsim.config.coordinates_osrm_config import CoordinatesOSRMConfig
-from multimodalsim.simulator.vehicle import TimeCoordinatesLocation
+from multimodalsim.simulator.stop import TimeCoordinatesLocation, Location
+from multimodalsim.simulator.vehicle import Vehicle, Route
 
 logger = logging.getLogger(__name__)
 
 
 class Coordinates:
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def update_position(self, vehicle, route, time):
+    def update_position(self, vehicle: Vehicle,
+                        route: Route, time: float) -> Location:
         raise NotImplementedError(
             'Coordinates.update_position not implemented')
 
-    def update_polylines(self, route):
+    def update_polylines(
+            self, route) -> Optional[dict[str, tuple[str, list[float]]]]:
         raise NotImplementedError(
             'Coordinates.update_polylines not implemented')
 
 
 class CoordinatesFromFile(Coordinates):
-    def __init__(self, coordinates_file_path):
+    def __init__(self, coordinates_file_path: str):
         super().__init__()
         self.__coordinates_file_path = coordinates_file_path
         self.__vehicle_positions_dict = {}
         self.__read_coordinates_from_file()
 
-    def update_position(self, vehicle, route, time):
+    def update_position(self, vehicle: Vehicle,
+                        route: Route, time: float) -> Location:
 
         time_positions = None
         if vehicle.id in self.__vehicle_positions_dict:
@@ -56,12 +60,12 @@ class CoordinatesFromFile(Coordinates):
             # previous_stops.
             current_position = route.previous_stops[-1].location
 
-        update_time_dict(current_position, vehicle.id, time,
-                         self.__vehicle_positions_dict)
+        if current_position is not None:
+            self.__update_time_dict(current_position, vehicle.id, time)
 
         return current_position
 
-    def update_polylines(self, route):
+    def update_polylines(self, route: Route) -> None:
         return None
 
     def __read_coordinates_from_file(self):
@@ -76,7 +80,7 @@ class CoordinatesFromFile(Coordinates):
                 lat = float(coordinates_row[3])
                 time_coordinates = TimeCoordinatesLocation(time, lon, lat)
 
-                vehicle_id_col = literal_eval(coordinates_row[0])
+                vehicle_id_col = coordinates_row[0]
                 vehicle_id_list = vehicle_id_col \
                     if type(vehicle_id_col) == list else [vehicle_id_col]
 
@@ -87,15 +91,21 @@ class CoordinatesFromFile(Coordinates):
                     self.__vehicle_positions_dict[vehicle_id][time] = \
                         time_coordinates
 
+    def __update_time_dict(self, value, key, time):
+        if key not in self.__vehicle_positions_dict:
+            self.__vehicle_positions_dict[key] = {}
+        self.__vehicle_positions_dict[key][time] = value
+
 
 class CoordinatesOSRM(Coordinates):
-    def __init__(self, config=None):
+    def __init__(self,
+                 config: Optional[str | CoordinatesOSRMConfig] = None) -> None:
         super().__init__()
 
-        config = CoordinatesOSRMConfig() if config is None else config
-        self.__osrm_url = config.url
+        self.__load_config(config)
 
-    def update_position(self, vehicle, route, current_time):
+    def update_position(self, vehicle: Vehicle,
+                        route: Route, time: float) -> Location:
 
         current_position = None
 
@@ -103,24 +113,22 @@ class CoordinatesOSRM(Coordinates):
             current_position = route.current_stop.location
         elif len(route.previous_stops) > 0 \
                 and vehicle.polylines is not None:
-            try:
-                # Current position is between two stops
-                stop1 = route.previous_stops[-1]
-                stop2 = route.next_stops[0]
-                stop_id = str(len(route.previous_stops) - 1)
+            # Current position is between two stops
+            stop1 = route.previous_stops[-1]
+            stop2 = route.next_stops[0]
+            stop_id = str(len(route.previous_stops) - 1)
 
-                current_coordinates = self.__extract_coordinates_from_polyline(
-                    vehicle, current_time, stop1, stop2, stop_id)
+            current_coordinates = self.__extract_coordinates_from_polyline(
+                vehicle, time, stop1, stop2, stop_id)
 
-                current_position = TimeCoordinatesLocation(current_time,
-                                                        current_coordinates[0],
-                                                        current_coordinates[1])
-            except Exception as e:
-                # logger.warning("Error while updating position for vehicle {}".format(vehicle.id))
-                current_position = route.previous_stops[-1].location
+            current_position = TimeCoordinatesLocation(time,
+                                                       current_coordinates[0],
+                                                       current_coordinates[1])
+
         return current_position
 
-    def update_polylines(self, route):
+    def update_polylines(self, route: Route) -> dict[
+        str, tuple[str, list[float]]]:
 
         polylines = {}
 
@@ -161,18 +169,23 @@ class CoordinatesOSRM(Coordinates):
                     leg_polyline = polyline.encode(coordinates, geojson=True)
                     leg_durations_frac = [1.0]
                     polylines[str(i)] = (leg_polyline, leg_durations_frac)
-                    # polylines[stop_ids[i]] = (leg_polyline, leg_durations_frac)
 
         else:
             polylines[str(0)] = ("", [])
-            # polylines[stop_ids[0]] = ("", [])
 
         return polylines
+
+    def __load_config(self, config):
+        if isinstance(config, str):
+            config = CoordinatesOSRMConfig(config)
+        elif not isinstance(config, CoordinatesOSRMConfig):
+            config = CoordinatesOSRMConfig()
+
+        self.__osrm_url = config.url
 
     def __extract_coordinates_from_polyline(self, vehicle, current_time, stop1,
                                             stop2, stop_id):
 
-        # stop_polyline_durations = vehicle.polylines[stop1.location.label]
         stop_polyline_durations = vehicle.polylines[stop_id]
 
         stop_coordinates = polyline.decode(stop_polyline_durations[0],
@@ -254,7 +267,6 @@ class CoordinatesOSRM(Coordinates):
             leg_coordinates = coordinates[start_coord_index:end_coord_index]
             leg_polyline = polyline.encode(leg_coordinates, geojson=True)
 
-            # polylines[stop_ids[leg_index]] = (leg_polyline, leg_durations_frac)
             polylines[str(leg_index)] = (leg_polyline, leg_durations_frac)
 
             # The last coordinates of a given leg are the same as the first

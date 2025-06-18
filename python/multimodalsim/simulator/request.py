@@ -1,12 +1,18 @@
 import logging
 import copy
+from typing import Optional
 
+import multimodalsim.state_machine.state_machine as state_machine
+from multimodalsim.simulator.stop import Location
+import multimodalsim.simulator.vehicle as vehicle_module
 from multimodalsim.state_machine.state_machine import PassengerStateMachine
+from multimodalsim.state_machine.status import PassengerStatus
+
 
 logger = logging.getLogger(__name__)
 
 
-class Request(object):
+class Request:
     """The ``Request`` class mostly serves as a structure for storing basic
        information about the passengers.
        Attributes:
@@ -29,8 +35,9 @@ class Request(object):
             Name of the passenger.
        """
 
-    def __init__(self, id, origin, destination, nb_passengers, release_time,
-                 ready_time, due_time, name=None):
+    def __init__(self, id: str | int, origin: Location, destination: Location,
+                 nb_passengers: int, release_time: float, ready_time: float,
+                 due_time: float, name: Optional[str] = None) -> None:
         self.__id = id
         self.__origin = origin
         self.__destination = destination
@@ -40,7 +47,7 @@ class Request(object):
         self.__release_time = release_time
         self.__name = name
 
-    def __str__(self):
+    def __str__(self) -> str:
         class_string = str(self.__class__) + ": {"
         for attribute, value in self.__dict__.items():
             class_string += str(attribute) + ": " + str(value) + ",\n"
@@ -48,35 +55,35 @@ class Request(object):
         return class_string
 
     @property
-    def id(self):
+    def id(self) -> str | int:
         return self.__id
 
     @property
-    def origin(self):
+    def origin(self) -> Location:
         return self.__origin
 
     @property
-    def destination(self):
+    def destination(self) -> Location:
         return self.__destination
 
     @property
-    def nb_passengers(self):
+    def nb_passengers(self) -> int:
         return self.__nb_passengers
 
     @property
-    def ready_time(self):
+    def ready_time(self) -> float:
         return self.__ready_time
 
     @property
-    def due_time(self):
+    def due_time(self) -> float:
         return self.__due_time
 
     @property
-    def release_time(self):
+    def release_time(self) -> float:
         return self.__release_time
 
     @property
-    def name(self):
+    def name(self) -> Optional[str]:
         return self.__name
 
 
@@ -86,13 +93,18 @@ class Leg(Request):
         Properties
         ----------
         assigned_vehicle: Vehicle
-            the vehicle assigned to the leg.
+            Vehicle assigned to the leg.
         trip: Trip
-            the trip to which belongs the leg.
+            Trip to which belongs the leg.
+        boarding_time: float
+            Time at which the leg boarded the assigned vehicle.
+        alighting_time: float
+            Time at which the leg alighted from the assigned vehicle.
     """
 
-    def __init__(self, id, origin, destination, nb_passengers, release_time,
-                 ready_time, due_time, trip=None):
+    def __init__(self, id: str | int, origin: Location, destination: Location,
+                 nb_passengers: int, release_time: float, ready_time: float,
+                 due_time: float, trip: Optional['Trip'] = None):
         super().__init__(id, origin, destination, nb_passengers, release_time,
                          ready_time, due_time)
         self.__assigned_vehicle = None
@@ -169,17 +181,18 @@ class Trip(Request):
         ----------
         status: int
             Represents the different status of the passenger associated with
-            the trip (PassengersStatus(Enum)).
+            the trip (PassengerStatus(Enum)).
         previous_legs: list of Leg objects
             the previous legs of the trip.
-        current_leg: Leg
+        previous_legs: Leg
             the current leg of the trip.
         next_legs: Leg
             the next legs of the trip.
     """
 
-    def __init__(self, id, origin, destination, nb_passengers, release_time,
-                 ready_time, due_time, name=None):
+    def __init__(self, id: str | int, origin: Location, destination: Location,
+                 nb_passengers: int, release_time: float, ready_time: float,
+                 due_time: float, name: Optional[str] = None) -> None:
         super().__init__(id, origin, destination, nb_passengers, release_time,
                          ready_time, due_time, name)
 
@@ -236,7 +249,7 @@ class Trip(Request):
             raise ValueError(
                 "Trip ({}) does not have any next leg.".format(self.id))
 
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo: dict) -> 'Trip':
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result
@@ -248,9 +261,9 @@ class Trip(Request):
         return result
 
 
-class PassengerUpdate(object):
-    def __init__(self, vehicle_id, request_id, next_legs=None, current_leg=None):
+class PassengerUpdate:
+    def __init__(self, vehicle_id: str | int, request_id: str | int,
+                 next_legs: Optional[list[Leg]] = None) -> None:
         self.assigned_vehicle_id = vehicle_id
         self.request_id = request_id
         self.next_legs = next_legs
-        self.current_leg = current_leg

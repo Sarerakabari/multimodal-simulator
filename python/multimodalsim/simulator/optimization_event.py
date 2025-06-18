@@ -5,12 +5,20 @@ import multiprocessing as mp
 
 from multimodalsim.simulator.event import ActionEvent, Event
 from multimodalsim.simulator.vehicle import RouteUpdate
+from typing import Optional, Callable
+
+from multimodalsim.optimization.state import State
+from multimodalsim.simulator.event import ActionEvent, TimeSyncEvent
+import multimodalsim.simulator.vehicle as vehicle_module
 
 import multimodalsim.simulator.request as request
 import \
     multimodalsim.simulator.passenger_event as passenger_event_process
 import multimodalsim.simulator.vehicle_event as vehicle_event_process
 from multimodalsim.state_machine.status import OptimizationStatus
+import multimodalsim.simulator.event_queue as event_queue
+import multimodalsim.simulator.environment as environment
+import multimodalsim.optimization.optimization as optimization_module
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +52,13 @@ class Optimize(ActionEvent):
             process_message = 'Optimize process is put back in the event queue'
         else:
             process_message = super().process(env)
+
         return process_message
 
-    def _process(self, env):
-        env_stats = env.get_environment_statistics()
+    def _process(self, env: 'environment.Environment') -> str:
+
+        stats_extractor = env.optimization.environment_statistics_extractor
+        env_stats = stats_extractor.extract_environment_statistics(env)
 
         if env.optimization.need_to_optimize(env_stats):
             env.optimize_cv = Condition()
@@ -58,10 +69,15 @@ class Optimize(ActionEvent):
                 self.__optimize_asynchronously(env)
             else:
                 self.__optimize_synchronously(env)
+        else:
+            optimization_result = optimization_module.OptimizationResult(
+                None, [], [])
+            EnvironmentUpdate(optimization_result, self.queue).add_to_queue()
 
-        return 'Finished processing Optimize'
+        return 'Optimize process is implemented'
 
-    def add_to_queue(self):
+    def add_to_queue(self) -> None:
+
         if self.__multiple_optimize_events or not \
                 self.queue.is_event_type_in_queue(self.__class__, self.time):
             super().add_to_queue()
@@ -189,7 +205,7 @@ class EnvironmentUpdate(ActionEvent):
 
         for veh in self.__optimization_result.modified_vehicles:
             route = \
-                self.__optimization_result.state.route_by_vehicle_id[veh.id]#optimized route
+                self.__optimization_result.state.route_by_vehicle_id[veh.id]
             if route.current_stop is not None:
                 # Copy passengers_to_board and departure time of current_stop.
                 current_stop_modified_passengers_to_board = \
@@ -284,6 +300,24 @@ class Hold(Event):
 
         return 'Done processing Hold process'
 
+    def cv(self) -> Condition:
+        return self.__cv
+
+    @property
+    def optimization_process(self) -> 'DispatchProcess':
+        return self.__optimization_process
+
+    @optimization_process.setter
+    def optimization_process(self, optimization_process: 'DispatchProcess'):
+        self.__optimization_process = optimization_process
+
+    def _synchronize(self) -> None:
+        with self.__cv:
+            if not self.cancelled:
+                wait_return = self.__cv.wait(timeout=self._waiting_time)
+                if not wait_return:
+                    self.__terminate_process()
+
     def __terminate_process(self):
         if self.__optimization_process.is_alive():
             logger.warning("Terminate optimization process".format(
@@ -297,12 +331,12 @@ class Hold(Event):
 
 
 class DispatchProcess(mp.Process):
-    def __init__(self, dispatch, process_dict):
+    def __init__(self, dispatch: Callable, process_dict: dict) -> None:
         super().__init__()
         self.__dispatch = dispatch
         self.__process_dict = process_dict
 
-    def run(self):
+    def run(self) -> None:
         state = self.__process_dict["state"]
         dispatch_function = self.__process_dict["dispatch_function"]
 

@@ -1,4 +1,6 @@
 import logging
+from typing import Optional
+
 import pandas as pd
 
 import multimodalsim.simulator.request
@@ -6,24 +8,29 @@ import multimodalsim.simulator.vehicle
 import multimodalsim.simulator.passenger_event
 import multimodalsim.simulator.vehicle_event
 from multimodalsim.config.data_collector_config import DataCollectorConfig
-from multimodalsim.simulator.event import ActionEvent
-from multimodalsim.state_machine.status import PassengersStatus
+from multimodalsim.simulator.event import ActionEvent, Event
+from multimodalsim.state_machine.status import PassengerStatus
+import multimodalsim.simulator.environment as environment
 
 logger = logging.getLogger(__name__)
 
 
 class DataCollector:
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def collect(self, env):
+    def collect(self, env: 'environment.Environment',
+                current_event: Optional[Event] = None,
+                event_index: Optional[int] = None,
+                event_priority: Optional[int] = None) -> None:
         raise NotImplementedError('DataCollector.collect not implemented')
 
 
 class StandardDataCollector(DataCollector):
 
-    def __init__(self, data_container=None, config=None):
+    def __init__(self, data_container: Optional['DataContainer'] = None,
+                 config: Optional[str | DataCollectorConfig] = None) -> None:
         super().__init__()
 
         self.__data_container = DataContainer() if data_container is None \
@@ -35,15 +42,16 @@ class StandardDataCollector(DataCollector):
         self.__current_event = None
         self.__time = None
 
-        config = DataCollectorConfig() if config is None else config
         self.__load_config(config)
 
     @property
-    def data_container(self):
+    def data_container(self) -> 'DataContainer':
         return self.__data_container
 
-    def collect(self, env, current_event=None, event_index=None,
-                event_priority=None):
+    def collect(self, env: 'environment.Environment',
+                current_event: Optional[Event] = None,
+                event_index: Optional[int] = None,
+                event_priority: Optional[int] = None) -> None:
         self.__env = env
         self.__current_event = current_event
         self.__event_priority = event_priority
@@ -70,12 +78,15 @@ class StandardDataCollector(DataCollector):
         self.__collect_environment_data(env)
 
     def __load_config(self, config):
+        if isinstance(config, str):
+            config = DataCollectorConfig(config)
+        elif not isinstance(config, DataCollectorConfig):
+            config = DataCollectorConfig()
+
         self.__data_container.set_columns("vehicles",
                                           config.get_vehicles_columns())
         self.__data_container.set_columns("trips",
                                           config.get_trips_columns())
-        self.__data_container.set_columns("trips_details",
-                                          config.get_trips_details_columns())
         self.__data_container.set_columns("events",
                                           config.get_events_columns())
 
@@ -108,7 +119,7 @@ class StandardDataCollector(DataCollector):
             if vehicle.polylines is not None and len(vehicle.polylines) > 0 \
             else None
 
-        mode = vehicle.mode if vehicle.mode is not None else "bus2"
+        mode = vehicle.mode if vehicle.mode is not None else ""
 
         obs_dict = {"id": vehicle.id,
                     "time": self.__time,
@@ -233,12 +244,12 @@ class StandardDataCollector(DataCollector):
 
         current_location = None
         if trip.current_leg is not None \
-                and trip.status in [PassengersStatus.RELEASE,
-                                    PassengersStatus.ASSIGNED,
-                                    PassengersStatus.READY]:
+                and trip.status in [PassengerStatus.RELEASE,
+                                    PassengerStatus.ASSIGNED,
+                                    PassengerStatus.READY]:
             current_location = trip.current_leg.origin
         elif trip.current_leg is not None \
-                and trip.status == PassengersStatus.COMPLETE:
+                and trip.status == PassengerStatus.COMPLETE:
             current_location = trip.current_leg.destination
         elif len(trip.next_legs) > 0:
             current_location = trip.next_legs[0].origin
@@ -324,7 +335,7 @@ class StandardDataCollector(DataCollector):
 
     def __collect_nb_active_trips(self, trip, active_trips_by_mode):
 
-        if trip.status != PassengersStatus.COMPLETE:
+        if trip.status != PassengerStatus.COMPLETE:
             active_trips_by_mode[None] += 1
             if trip.current_leg is not None \
                     and trip.current_leg.assigned_vehicle is not None:
@@ -337,7 +348,7 @@ class StandardDataCollector(DataCollector):
 
 class DataContainer:
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.__observations_tables = {}
         self.__observations_tables_dfs = {}
         self.__dfs_columns = {}
@@ -345,27 +356,28 @@ class DataContainer:
         self.__updated_dfs = {}
 
     @property
-    def observations_tables(self):
+    def observations_tables(self) -> dict:
         return self.__observations_tables
 
-    def get_observations_table_df(self, table_name):
+    def get_observations_table_df(self, table_name: str) -> pd.DataFrame:
 
         if not self.__updated_dfs[table_name]:
             self.__convert_obs_table_to_df(table_name)
 
         return self.__observations_tables_dfs[table_name]
 
-    def get_columns(self, table_name):
+    def get_columns(self, table_name: str) -> dict:
         return self.__dfs_columns[table_name]
 
-    def set_columns(self, table_name, columns):
+    def set_columns(self, table_name: str, columns: dict):
         self.__dfs_columns[table_name] = columns
 
-    def add_observation(self, table_name, obs_dict, obs_id_key=None):
+    def add_observation(self, table_name: str, obs_dict: dict,
+                        obs_id_key: Optional[str] = None):
         self.__add_obs_to_dict(table_name, obs_dict, obs_id_key)
         self.__updated_dfs[table_name] = False
 
-    def save_observations_to_csv(self, table_name, file_name):
+    def save_observations_to_csv(self, table_name: str, file_name: str):
 
         self.get_observations_table_df(table_name).to_csv(file_name,
                                                           index=False)

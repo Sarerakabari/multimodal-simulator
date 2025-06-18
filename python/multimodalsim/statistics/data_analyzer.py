@@ -1,69 +1,82 @@
+from typing import Optional
+
 import pandas as pd
 import logging
 
 from multimodalsim.config.data_analyzer_config import DataAnalyzerConfig
-from multimodalsim.state_machine.status import PassengersStatus, VehicleStatus
+from multimodalsim.observer.data_collector import DataContainer
+from multimodalsim.state_machine.status import PassengerStatus, VehicleStatus
 
 logger = logging.getLogger(__name__)
 
+
 class DataAnalyzer:
 
-    def __init__(self, data_container=None):
+    def __init__(self, data_container: Optional[DataContainer] = None) -> None:
         self.__data_container = data_container
 
         pd.set_option('display.max_rows', 50)
         pd.set_option('display.max_columns', 50)
 
     @property
-    def data_container(self):
+    def data_container(self) -> Optional[DataContainer]:
         return self.__data_container
 
     @data_container.setter
-    def data_container(self, data_container):
+    def data_container(self, data_container: Optional[DataContainer]) -> None:
         self.__data_container = data_container
 
-    def get_description(self, table_name):
+    def get_description(self, table_name: str) -> pd.DataFrame:
         observations_df = self.data_container \
             .get_observations_table_df(table_name)
 
         return observations_df.describe(include='all')
 
-    def get_vehicles_statistics(self, mode):
+    @property
+    def modes(self) -> list[str]:
+        raise NotImplementedError("DataAnalyzer.modes has not been "
+                                  "implemented")
+
+    def get_statistics(self):
+        raise NotImplementedError("DataAnalyzer.get_statistics has not been "
+                                  "implemented")
+
+    def get_vehicles_statistics(self, mode: Optional[str] = None) -> dict:
         raise NotImplementedError("DataAnalyzer.get_vehicles_statistics has "
                                   "not been implemented")
 
-    def get_trips_statistics(self, mode):
-        raise NotImplementedError("DataAnalyzer.get_vehicles_statistics has "
+    def get_trips_statistics(self, mode: Optional[str] = None) -> dict:
+        raise NotImplementedError("DataAnalyzer.get_trips_statistics has "
                                   "not been implemented")
 
 
 class FixedLineDataAnalyzer(DataAnalyzer):
 
-    def __init__(self, data_container=None, config=None):
+    def __init__(self, data_container: Optional[DataContainer] = None,
+                 config: Optional[DataAnalyzerConfig] = None):
         super().__init__(data_container)
 
-        config = DataAnalyzerConfig() if config is None else config
         self.__load_config(config)
 
     @property
-    def nb_events(self):
+    def nb_events(self) -> int:
         return len(self.data_container.get_observations_table_df(
             self.__events_table_name))
 
     @property
-    def nb_event_types(self):
+    def nb_event_types(self) -> int:
         name_col = self.data_container.get_columns("events")["name"]
         return len(self.data_container.get_observations_table_df(
             self.__events_table_name).groupby(name_col))
 
     @property
-    def nb_events_by_type(self):
+    def nb_events_by_type(self) -> pd.Series:
         name_col = self.data_container.get_columns("events")["name"]
         return self.data_container.get_observations_table_df(
             self.__events_table_name)[name_col].value_counts().sort_index()
 
     @property
-    def modes(self):
+    def modes(self) -> list[str]:
         modes = []
         if "vehicles" in self.data_container.observations_tables:
             vehicles_df = self.data_container.get_observations_table_df(
@@ -74,7 +87,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
         return modes
 
     @property
-    def modes_by_vehicle(self):
+    def modes_by_vehicle(self) -> dict[str, str]:
         modes_by_vehicle = {}
         if "vehicles" in self.data_container.observations_tables:
             vehicles_df = self.data_container.get_observations_table_df(
@@ -86,7 +99,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return modes_by_vehicle
 
-    def get_total_nb_trips(self, mode=None):
+    def get_total_nb_trips(self, mode: Optional[str] = None) -> int:
         nb_trips = 0
         if "total_nb_trips_by_mode" in self.data_container.observations_tables:
             trips_by_mode = self.data_container.observations_tables[
@@ -96,7 +109,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return nb_trips
 
-    def get_nb_active_trips(self, mode=None):
+    def get_nb_active_trips(self, mode: Optional[str] = None) -> int:
         nb_trips = 0
         if "nb_active_trips_by_mode" \
                 in self.data_container.observations_tables:
@@ -107,7 +120,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return nb_trips
 
-    def get_total_nb_vehicles(self, mode=None):
+    def get_total_nb_vehicles(self, mode: Optional[str] = None) -> int:
         nb_vehicles = 0
         if "vehicles" in self.data_container.observations_tables:
             vehicles_df = self.data_container.get_observations_table_df(
@@ -123,7 +136,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return nb_vehicles
 
-    def get_nb_active_vehicles(self, mode=None):
+    def get_nb_active_vehicles(self, mode: Optional[str] = None) -> int:
         nb_vehicles = 0
         if "vehicles" in self.data_container.observations_tables:
             vehicles_df = self.data_container.get_observations_table_df(
@@ -144,7 +157,8 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return nb_vehicles
 
-    def get_vehicles_distance_travelled(self, mode=None):
+    def get_vehicles_distance_travelled(
+            self, mode: Optional[str] = None) -> float:
         total_dist = 0
         if "vehicles" in self.data_container.observations_tables:
             vehicles_df = self.data_container.get_observations_table_df(
@@ -165,7 +179,8 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return total_dist
 
-    def get_trips_distance_travelled(self, mode=None):
+    def get_trips_distance_travelled(
+            self, mode: Optional[str] = None) -> float:
         total_dist = 0
         if "trips_cumulative_distance" \
                 in self.data_container.observations_tables:
@@ -183,13 +198,24 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return total_dist
 
-    def get_total_ghg_e(self, mode=None):
+    def get_total_ghg_e(self, mode: Optional[str] = None) -> float:
 
         total_distance_travelled = self.get_vehicles_distance_travelled(mode)
 
         return total_distance_travelled * self.__default_ghg_e
 
-    def get_vehicles_statistics(self, mode=None):
+    def get_statistics(self):
+
+        statistics = {
+            "trips": {mode: self.get_trips_statistics(mode)
+                      for mode in self.modes},
+            "vehicles": {mode: self.get_vehicles_statistics(mode)
+                         for mode in self.modes}
+        }
+
+        return statistics
+
+    def get_vehicles_statistics(self, mode: Optional[str] = None) -> dict:
 
         nb_vehicles = self.get_total_nb_vehicles(mode)
         nb_active_vehicles = self.get_nb_active_vehicles(mode)
@@ -205,32 +231,31 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return vehicles_statistics
 
-    def get_trips_statistics(self, mode=None):
+    def get_trips_statistics(self, mode: Optional[str] = None) -> dict:
 
         nb_trips = self.get_total_nb_trips(mode)
         nb_active_trips = self.get_nb_active_trips(mode)
         total_distance_travelled = self.get_trips_distance_travelled(mode)
 
-        trips_statistics = {
+        vehicles_statistics = {
             "Total number of trips": nb_trips,
             "Number of active trips": nb_active_trips,
             "Distance travelled": total_distance_travelled
         }
 
-        return trips_statistics
+        return vehicles_statistics
 
-    def get_vehicle_status_duration_statistics(self):
+    def get_vehicle_status_duration_statistics(self) -> pd.DataFrame:
         vehicles_df = self.data_container.get_observations_table_df(
             self.__vehicles_table_name)
         return self.__generate_status_duration_stats(vehicles_df, "vehicles")
 
-    def get_trip_status_duration_statistics(self):
+    def get_trip_status_duration_statistics(self) -> pd.DataFrame:
         trips_df = self.data_container.get_observations_table_df(
-                self.__trips_table_name)
-        # self.__create_trip_details_df(trips_df, "trips")
+            self.__trips_table_name)
         return self.__generate_status_duration_stats(trips_df, "trips")
 
-    def get_boardings_alightings_stats(self):
+    def get_boardings_alightings_stats(self) -> pd.DataFrame:
         trips_df = self.data_container.get_observations_table_df(
             self.__trips_table_name)
         status_col = self.data_container.get_columns("trips")["status"]
@@ -238,7 +263,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
             "previous_legs"]
 
         trips_complete_series = trips_df[trips_df[status_col]
-                                         == PassengersStatus.COMPLETE]
+                                         == PassengerStatus.COMPLETE]
 
         trips_legs_complete_series = trips_complete_series.apply(
             lambda x: x[previous_legs_col], axis=1)
@@ -264,7 +289,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return boardings_alightings_stats_df
 
-    def get_max_load_by_vehicle(self):
+    def get_max_load_by_vehicle(self) -> pd.DataFrame:
         vehicles_df = self.data_container.get_observations_table_df(
             self.__vehicles_table_name)
         onboard_legs_col = self.data_container.get_columns("vehicles")[
@@ -278,7 +303,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
             agg({"max load": max})
         return vehicles_max_load_df
 
-    def get_nb_legs_by_trip_stats(self):
+    def get_nb_legs_by_trip_stats(self) -> pd.DataFrame:
         trips_df = self.data_container.get_observations_table_df(
             self.__trips_table_name)
         id_col = self.data_container.get_columns("trips")["id"]
@@ -286,7 +311,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
         previous_legs_col = self.data_container.get_columns("trips")[
             "previous_legs"]
 
-        trips_complete_series = trips_df[trips_df[status_col] 
+        trips_complete_series = trips_df[trips_df[status_col]
                                          == VehicleStatus.COMPLETE]
         trips_legs_complete_series = trips_complete_series.apply(
             lambda x: x[previous_legs_col], axis=1)
@@ -298,7 +323,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         return nb_legs_by_trip_df
 
-    def get_trip_duration_stats(self):
+    def get_trip_duration_stats(self) -> pd.DataFrame:
         trips_df = self.data_container.get_observations_table_df(
             self.__trips_table_name)
         id_col = self.data_container.get_columns("trips")["id"]
@@ -306,13 +331,13 @@ class FixedLineDataAnalyzer(DataAnalyzer):
         time_col = self.data_container.get_columns("trips")["time"]
 
         trips_ready_complete_df = trips_df[trips_df[status_col].isin(
-            [PassengersStatus.READY, PassengersStatus.COMPLETE])]
+            [PassengerStatus.READY, PassengerStatus.COMPLETE])]
         trip_durations_df = trips_ready_complete_df.groupby(id_col).agg(
             {time_col: lambda x: max(x) - min(x)})
 
         return trip_durations_df
 
-    def get_route_duration_stats(self):
+    def get_route_duration_stats(self) -> pd.DataFrame:
         vehicles_df = self.data_container.get_observations_table_df(
             self.__vehicles_table_name)
         id_col = self.data_container.get_columns("vehicles")["id"]
@@ -321,15 +346,19 @@ class FixedLineDataAnalyzer(DataAnalyzer):
 
         vehicles_boarding_complete_df = vehicles_df[
             vehicles_df[status_col].isin([VehicleStatus.BOARDING,
-                                               VehicleStatus.COMPLETE])]
+                                          VehicleStatus.COMPLETE])]
         route_durations_df = vehicles_boarding_complete_df.groupby(id_col).agg(
             {time_col: lambda x: max(x) - min(x)})
 
         return route_durations_df
 
     def __load_config(self, config):
-        self.__default_ghg_e = config.ghg_e
+        if isinstance(config, str):
+            config = DataAnalyzerConfig(config)
+        elif not isinstance(config, DataAnalyzerConfig):
+            config = DataAnalyzerConfig()
 
+        self.__default_ghg_e = config.ghg_e
         self.__events_table_name = config.events_table
         self.__vehicles_table_name = config.vehicles_table
         self.__trips_table_name = config.trips_table
@@ -352,7 +381,7 @@ class FixedLineDataAnalyzer(DataAnalyzer):
         time_col = self.data_container.get_columns(table_name)["time"]
 
         ## first clean data of all rows for which 'status' is 'PassengersStatus.ASSIGNED'
-        observations_sorted = observations_df[observations_df[status_col] != PassengersStatus.ASSIGNED]
+        observations_sorted = observations_df[observations_df[status_col] != PassengerStatus.ASSIGNED]
         observations_sorted = observations_sorted.sort_values(by=[id_col, time_col], ascending =[True, True], inplace=False)
         # if previous row has same id_col and same status_col, then remove the row
         observations_sorted = observations_sorted[observations_sorted[status_col] != observations_sorted[status_col].shift(1)]
@@ -360,18 +389,18 @@ class FixedLineDataAnalyzer(DataAnalyzer):
         observations_sorted["duration"] = observations_sorted[time_col]. \
             transform(lambda s: s.shift(-1) - s)
         ### if status is 'PassengersStatus.COMPLETE' the 'duration' should be equal to 0
-        observations_sorted.loc[observations_sorted[status_col] == PassengersStatus.COMPLETE, 'duration'] = 0
+        observations_sorted.loc[observations_sorted[status_col] == PassengerStatus.COMPLETE, 'duration'] = 0
         table_name = 'trips_details'
         ### For each group, wait before boarding is the duration of the first row with status 'PassengersStatus.Ready' before the first row with status 'PassengersStatus.ONBOARD'
         all_id_values = observations_sorted[id_col].unique()
         for id in all_id_values:
             group = observations_sorted[observations_sorted[id_col] == id]
-            ready_row = group[group[status_col] == PassengersStatus.READY].head(1)
+            ready_row = group[group[status_col] == PassengerStatus.READY].head(1)
             if ready_row.empty:
                 continue
             wait_before_boarding = ready_row['duration'].iat[0]
-            onboard_time = sum(group[group[status_col] == PassengersStatus.ONBOARD]['duration'])
-            transfer_time = sum(group[group[status_col] == PassengersStatus.READY]['duration']) - wait_before_boarding
+            onboard_time = sum(group[group[status_col] == PassengerStatus.ONBOARD]['duration'])
+            transfer_time = sum(group[group[status_col] == PassengerStatus.READY]['duration']) - wait_before_boarding
             observation = {
                 "id" : group[id_col].iat[0],
                 "wait_before_boarding" : wait_before_boarding,

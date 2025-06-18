@@ -1,8 +1,17 @@
 import logging
+from typing import Optional, Union
 
 from multimodalsim.config.optimization_config import OptimizationConfig
-from multimodalsim.optimization.splitter import OneLegSplitter
-from multimodalsim.state_machine.state_machine import OptimizationStateMachine
+import multimodalsim.optimization.dispatcher as dispatcher_module
+from multimodalsim.optimization.splitter import Splitter, OneLegSplitter
+import multimodalsim.state_machine.state_machine as state_machine
+import multimodalsim.optimization.state as state_module
+import multimodalsim.simulator.request as request
+import multimodalsim.simulator.environment as environment_module
+import multimodalsim.simulator.vehicle as vehicle_module
+from multimodalsim.simulator.environment_statistics import \
+    EnvironmentStatisticsExtractor, EnvironmentStatistics
+from multimodalsim.state_machine.status import OptimizationStatus
 
 logger = logging.getLogger(__name__)
 

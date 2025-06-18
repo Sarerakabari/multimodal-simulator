@@ -2,7 +2,7 @@ import pandas as pd
 import logging
 import sys
 sys.path.insert(1, r"C:\Users\kklau\Desktop\Simulator")
-
+from typing import Optional
 from multimodalsim.config.request_generator_config \
     import RequestsGeneratorConfig
 
@@ -10,19 +10,20 @@ logger = logging.getLogger(__name__)
 
 
 class RequestsGenerator:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def generate_requests(self):
+    def generate_requests(self) -> pd.DataFrame:
         pass
 
 
 class CAPRequestsGenerator(RequestsGenerator):
 
-    def __init__(self, cap_file_path, stop_times_file_path, config=None, trips_file_path = None):
+    def __init__(
+            self, cap_file_path: str, stop_times_file_path: str,
+            config: Optional[str | RequestsGeneratorConfig] = None) -> None:
         super().__init__()
 
-        config = RequestsGeneratorConfig() if config is None else config
         self.__load_config(config)
 
         self.__cap_formatter = CAPFormatter(cap_file_path,
@@ -33,13 +34,14 @@ class CAPRequestsGenerator(RequestsGenerator):
         self.__trips_file_path = trips_file_path
 
     @property
-    def requests_df(self):
+    def requests_df(self) -> pd.DataFrame:
         return self.__requests_df
 
-    def generate_requests(self, max_connection_time=None,
-                          release_time_delta=None, ready_time_delta=None,
-                          due_time_delta=None,
-                          PI = False):
+    def generate_requests(
+            self, max_connection_time: Optional[float] = None,
+            release_time_delta: Optional[float] = None,
+            ready_time_delta: Optional[float] = None,
+            due_time_delta: Optional[float] = None) -> pd.DataFrame:
 
         if max_connection_time is None:
             max_connection_time = self.__max_connection_time
@@ -55,10 +57,10 @@ class CAPRequestsGenerator(RequestsGenerator):
         self.__format_requests(release_time_delta, ready_time_delta,
                                due_time_delta)
         self.__get_first_possible_transfers_for_requests(time_limit=300, PI = PI)
-
         return self.__requests_df
 
-    def save_to_csv(self, requests_file_path, requests_df=None):
+    def save_to_csv(self, requests_file_path: str,
+                    requests_df: Optional[pd.DataFrame] = None) -> None:
         if requests_df is None and self.__requests_df is None:
             raise ValueError("Requests must be generated first!")
 
@@ -68,6 +70,11 @@ class CAPRequestsGenerator(RequestsGenerator):
         requests_df.to_csv(requests_file_path, sep=";")
 
     def __load_config(self, config):
+        if isinstance(config, str):
+            config = RequestsGeneratorConfig(config)
+        elif not isinstance(config, RequestsGeneratorConfig):
+            config = RequestsGeneratorConfig()
+
         self.__max_connection_time = config.max_connection_time
         self.__release_time_delta = config.release_time_delta
         self.__ready_time_delta = config.ready_time_delta
@@ -268,10 +275,10 @@ class CAPFormatter:
         self.__read_stop_times_csv(stop_times_file_path)
 
     @property
-    def cap_df(self):
+    def cap_df(self) -> pd.DataFrame:
         return self.__cap_df
 
-    def format_cap(self, max_connection_time):
+    def format_cap(self, max_connection_time: float) -> pd.DataFrame:
         self.__preformat()
         self.__filter()
         self.__add_boarding_type(max_connection_time)
@@ -279,6 +286,11 @@ class CAPFormatter:
         return self.__cap_df
 
     def __load_config(self, config):
+        if isinstance(config, str):
+            config = RequestsGeneratorConfig(config)
+        elif not isinstance(config, RequestsGeneratorConfig):
+            config = RequestsGeneratorConfig()
+
         self.__id_col = config.id_col
         self.__arrival_time_col = config.arrival_time_col
         self.__boarding_time_col = config.boarding_time_col
@@ -334,9 +346,9 @@ class CAPFormatter:
         self.__cap_df = cap_with_stops_list_df[
             cap_with_stops_list_df["trip_exists"]]
 
-        # non_existent_trips_df = \
-        #     cap_with_stops_list_df[~cap_with_stops_list_df["trip_exists"]]
-        # non_existent_trips_df.to_csv("non_existent_trips.csv")
+        non_existent_trips_df = \
+            cap_with_stops_list_df[~cap_with_stops_list_df["trip_exists"]]
+        non_existent_trips_df.to_csv("non_existent_trips.csv")
 
         return self.__cap_df
 

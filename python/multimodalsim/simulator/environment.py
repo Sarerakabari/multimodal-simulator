@@ -1,14 +1,20 @@
 import copy
 import logging
-from multiprocessing import Condition
+from threading import Condition
+from typing import Optional, Any
 
-from multimodalsim.optimization.state import State
-from multimodalsim.state_machine.status import VehicleStatus, PassengersStatus
+import multimodalsim.optimization.optimization as optimization_module
+import multimodalsim.optimization.state as state_module
+from multimodalsim.simulator.coordinates import Coordinates
+import multimodalsim.simulator.request as request
+from multimodalsim.simulator.travel_times import TravelTimes
+from multimodalsim.simulator.vehicle import Vehicle, Route
+from multimodalsim.state_machine.status import VehicleStatus, PassengerStatus
 
 logger = logging.getLogger(__name__)
 
 
-class Environment(object):
+class Environment:
     """The ``Environment`` class mostly serves as a structure for storing basic
     information about the environment
         Attributes:
@@ -135,61 +141,61 @@ class Environment(object):
         return found_leg
 
     @property
-    def assigned_trips(self):
+    def assigned_trips(self) -> list['request.Trip']:
         return self.__assigned_trips
 
-    def add_assigned_trip(self, trip):
+    def add_assigned_trip(self, trip: 'request.Trip') -> None:
         """ Adds a new trip to the list of assigned trips if it is not already
         there"""
         if trip not in self.__assigned_trips:
             self.__assigned_trips.append(trip)
 
-    def remove_assigned_trip(self, trip_id):
+    def remove_assigned_trip(self, trip_id: str | int) -> None:
         """ Removes a trip from the list of assigned trips based on its id"""
         self.__assigned_trips = [trip for trip in self.__assigned_trips
                                  if trip.id != trip_id]
 
     @property
-    def non_assigned_trips(self):
+    def non_assigned_trips(self) -> list['request.Trip']:
         return self.__non_assigned_trips
 
-    def add_non_assigned_trip(self, trip):
+    def add_non_assigned_trip(self, trip: 'request.Trip') -> None:
         """ Adds a new trip to the list of non-assigned trips it is not already
         there"""
         if trip not in self.__non_assigned_trips:
             self.__non_assigned_trips.append(trip)
 
-    def remove_non_assigned_trip(self, trip_id):
+    def remove_non_assigned_trip(self, trip_id: str | int) -> None:
         """ Removes a trip from the list of non-assigned trips based on its
         id """
         self.__non_assigned_trips = [trip for trip in self.__non_assigned_trips
                                      if trip.id != trip_id]
 
     @property
-    def vehicles(self):
+    def vehicles(self) -> list[Vehicle]:
         return self.__vehicles
 
-    def get_vehicle_by_id(self, vehicle_id):
+    def get_vehicle_by_id(self, vehicle_id: str | int) -> Vehicle:
         found_vehicle = None
         for vehicle in self.vehicles:
             if vehicle.id == vehicle_id:
                 found_vehicle = vehicle
         return found_vehicle
 
-    def add_vehicle(self, vehicle):
+    def add_vehicle(self, vehicle: Vehicle) -> None:
         """ Adds a new vehicle to the vehicles list"""
         self.__vehicles.append(vehicle)
 
-    def remove_vehicle(self, vehicle_id):
+    def remove_vehicle(self, vehicle_id: str | int) -> None:
         """ Removes a vehicle from the vehicles list based on its id"""
         self.__vehicles = [item for item in self.__vehicles
                            if item.attribute != vehicle_id]
 
     @property
-    def route_by_vehicle_id(self):
+    def route_by_vehicle_id(self) -> dict[str | int, Route]:
         return self.__routes_by_vehicle_id
 
-    def get_route_by_vehicle_id(self, vehicle_id):
+    def get_route_by_vehicle_id(self, vehicle_id: str | int) -> Route:
         route = None
         if vehicle_id in self.__routes_by_vehicle_id:
             route = self.__routes_by_vehicle_id[vehicle_id]
@@ -222,7 +228,7 @@ class Environment(object):
         state_copy.__assigned_trips = \
             self.__get_non_complete_trips(state_copy.__assigned_trips)
 
-        state_deepcopy = State(copy.deepcopy(state_copy))
+        state_deepcopy = state_module.State(copy.deepcopy(state_copy))
 
         return state_deepcopy
 
@@ -238,7 +244,7 @@ class Environment(object):
     def __get_non_complete_trips(self, trips):
         non_complete_trips = []
         for trip in trips:
-            if trip.status != PassengersStatus.COMPLETE:
+            if trip.status != PassengerStatus.COMPLETE:
                 non_complete_trips.append(trip)
         return non_complete_trips
 

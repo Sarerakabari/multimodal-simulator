@@ -1,21 +1,23 @@
 import logging
 import copy
+from typing import Optional
 
 import multimodalsim.state_machine.state_machine as state_machine
-from multimodalsim.state_machine.status import PassengersStatus
 import multimodalsim.simulator.request as request
+from multimodalsim.simulator.stop import Stop, Location
+from multimodalsim.state_machine.status import PassengerStatus, VehicleStatus
 
 logger = logging.getLogger(__name__)
 
 
-class Vehicle(object):
+class Vehicle:
     """The ``Vehicle`` class mostly serves as a structure for storing basic
         information about the vehicles.
         Properties
         ----------
         id: int
             Unique id
-        start_time: int
+        start_time: float
             Time at which the vehicle is ready to start
         start_stop: Stop
             Stop at which the vehicle starts.
@@ -38,14 +40,14 @@ class Vehicle(object):
         status: int
             Represents the different status of the vehicle
             (VehicleStatus(Enum)).
-        route_name: str 
-            Route name for the vehicle (line id + direction, example: 33S)
     """
 
-    MAX_TIME = 7*24*3600
+    MAX_TIME = 7 * 24 * 3600
 
-    def __init__(self, veh_id, start_time, start_stop, capacity, release_time,
-                 end_time=None, mode=None, reusable=False, route_name=None):
+    def __init__(self, veh_id: str | int, start_time: float, start_stop: Stop,
+                 capacity: int, release_time: float,
+                 end_time: Optional[float] = None,
+                 mode: Optional[str] = None, reusable: bool = False,route_name=None) -> None:
         self.__id = veh_id
         self.__start_time = start_time
         self.__end_time = end_time if end_time is not None else self.MAX_TIME
@@ -138,15 +140,13 @@ class Vehicle(object):
         return result
 
 
-class Route(object):
+class Route:
     """The ``Route`` class serves as a structure for storing basic
     information about the routes.
        Properties
        ----------
        vehicle: Vehicle
             vehicle associated with the route.
-       status: int
-            represents the different status of route (VehicleStatus(Enum)).
         current_stop: Stop
            current stop of the associated vehicle.
         next_stops: list of Stop objects
@@ -291,7 +291,7 @@ class Route(object):
         """Returns the list of requests ready to be picked up by the vehicle"""
         requests_to_pickup = []
         for trip in self.__current_stop.passengers_to_board:
-            if trip.status == PassengersStatus.READY:
+            if trip.status == PassengerStatus.READY:
                 requests_to_pickup.append(trip)
 
         return requests_to_pickup
@@ -691,78 +691,15 @@ class Stop(object):
         return result
 
 
-class Location(object):
-    """The ``Location`` class is a base class that mostly serves as a
-    structure for storing basic information about the location of a vehicle
-    or a passenger (i.e., Request). """
-
-    def __init__(self):
-        pass
-
-    def __eq__(self, other):
-        pass
-
-
-class LabelLocation(Location):
-    def __init__(self, label, lon=None, lat=None):
-        super().__init__()
-        self.label = label
-        self.lon = lon
-        self.lat = lat
-
-    def __str__(self):
-
-        if self.lon is not None or self.lat is not None:
-            ret_str = "{}: ({},{})".format(self.label, self.lon, self.lat)
-        else:
-            ret_str = "{}".format(self.label)
-
-        return ret_str
-
-    def __eq__(self, other):
-        if isinstance(other, LabelLocation):
-            return self.label == other.label
-        return False
-
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, copy.deepcopy(v, memo))
-        return result
-
-
-class TimeCoordinatesLocation(Location):
-    def __init__(self, time, lon, lat):
-        super().__init__()
-        self.time = time
-        self.lon = lon
-        self.lat = lat
-
-    def __str__(self):
-        return "{}: ({},{})".format(self.time, self.lon, self.lat)
-
-    def __eq__(self, other):
-        if isinstance(other, TimeCoordinatesLocation):
-            return self.time == other.time and self.lon == other.lon \
-                   and self.lat == other.lat
-        return False
-
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, copy.deepcopy(v, memo))
-        return result
-
-
-class RouteUpdate(object):
-    def __init__(self, vehicle_id,
-                 current_stop_modified_passengers_to_board=None,
-                 next_stops=None, current_stop_departure_time=None,
-                 modified_assigned_legs=None):
+class RouteUpdate:
+    def __init__(
+            self, vehicle_id: str | int,
+            current_stop_modified_passengers_to_board:
+            Optional[list['request.Trip']] = None,
+            next_stops: Optional[list[Stop]] = None,
+            current_stop_departure_time: Optional[int] = None,
+            modified_assigned_legs: Optional[
+                list['request.Leg']] = None) -> None:
         self.vehicle_id = vehicle_id
         self.current_stop_modified_passengers_to_board = \
             current_stop_modified_passengers_to_board

@@ -1,11 +1,16 @@
 import logging
 
+import multimodalsim.simulator.request as request
+import multimodalsim.simulator.vehicle as vehicle_module
+import multimodalsim.simulator.environment as environment_module
+
 logger = logging.getLogger(__name__)
 
 
 class State:
 
-    def __init__(self, env_deep_copy):
+    def __init__(self,
+                 env_deep_copy: 'environment_module.Environment') -> None:
         """The ``State`` class is a partial deep copy of the environment where
         only the data necessary for optimization is copied.
                 Attributes:
@@ -84,15 +89,17 @@ class State:
                 break
         return found_trip
 
-    def get_vehicle_by_id(self, vehicle_id):
+    def get_vehicle_by_id(self,
+                          vehicle_id: str | int) -> 'vehicle_module.Vehicle':
         found_vehicle = None
         for vehicle in self.vehicles:
+            logger.warning("vehicle.id={}".format(vehicle.id))
             if vehicle.id == vehicle_id:
                 found_vehicle = vehicle
                 break
         return found_vehicle
 
-    def get_leg_by_id(self, leg_id):
+    def get_leg_by_id(self, leg_id: str | int) -> 'request.Leg':
         # Look for the leg in the legs of all trips.
         found_leg = None
         for trip in self.trips:
@@ -111,13 +118,13 @@ class State:
 
         return found_leg
 
-    def freeze_routes_for_time_interval(self, time_interval):
+    def freeze_routes_for_time_interval(self, time_interval: float):
 
         self.current_time = self.current_time + time_interval
 
         self.__move_stops_backward()
 
-    def unfreeze_routes_for_time_interval(self, time_interval):
+    def unfreeze_routes_for_time_interval(self, time_interval: float):
 
         self.current_time = self.current_time - time_interval
 

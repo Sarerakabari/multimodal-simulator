@@ -5,8 +5,9 @@ from multimodalsim.observer.environment_observer import \
 from multimodalsim.optimization.fixed_line.fixed_line_dispatcher import \
     FixedLineDispatcher
 from multimodalsim.optimization.optimization import Optimization
-from multimodalsim.optimization.splitter import MultimodalSplitter
-from multimodalsim.reader.data_reader import BusDataReader, os
+from multimodalsim.optimization.splitter import MultimodalSplitter, \
+    OneLegSplitter
+from multimodalsim.reader.data_reader import BusDataReader
 from multimodalsim.simulator.simulation import Simulation
 
 
@@ -16,17 +17,16 @@ if __name__ == '__main__':
 
     # Read input data from files with a DataReader. The DataReader returns a
     # list of Vehicle objects and a list of Trip objects.
-    requests_file_path = os.path.join("data","fixed_line","bus","requests_v2.csv")
-    vehicles_file_path =  os.path.join("data","fixed_line","bus","vehicles_v2.csv")
+    requests_file_path = "../../../data/fixed_line/bus/requests_v2.csv"
+    vehicles_file_path = "../../../data/fixed_line/bus/vehicles_v2.csv"
 
     data_reader = BusDataReader(requests_file_path, vehicles_file_path)
 
-    vehicles = data_reader.get_vehicles()
+    vehicles, routes_by_vehicle_id = data_reader.get_vehicles()
     trips = data_reader.get_trips()
-    #BusDataReader does not have a build_network_graph method.
 
     # Initialize the optimizer.
-    splitter = MultimodalSplitter()# MutimodalSplitter needs a graph to be initialized, but it is not used in this example
+    splitter = OneLegSplitter()
     dispatcher = FixedLineDispatcher()
     opt = Optimization(dispatcher, splitter)
 
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     environment_observer = StandardEnvironmentObserver()
 
     # Initialize the simulation.
-    simulation = Simulation(opt, trips, vehicles,
+    simulation = Simulation(opt, trips, vehicles, routes_by_vehicle_id,
                             environment_observer=environment_observer)
 
     # Execute the simulation.

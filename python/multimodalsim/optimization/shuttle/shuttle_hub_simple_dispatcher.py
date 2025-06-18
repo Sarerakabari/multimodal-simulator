@@ -1,16 +1,21 @@
 import logging
 
 from itertools import cycle
+from typing import Tuple
 
 from multimodalsim.optimization.dispatcher import Dispatcher, \
     OptimizedRoutePlan
+from multimodalsim.optimization.state import State
+from multimodalsim.simulator.vehicle import Route
+import multimodalsim.simulator.request as request
 
 logger = logging.getLogger(__name__)
 
 
 class ShuttleHubSimpleDispatcher(Dispatcher):
 
-    def __init__(self, travel_time=600, hub_location="0"):
+    def __init__(self, travel_time: float = 600, hub_location: str = "0") \
+            -> None:
         """
         Parameters:
             travel_time: float
@@ -27,7 +32,8 @@ class ShuttleHubSimpleDispatcher(Dispatcher):
         # Initial location of all the vehicles
         self.__hub_location = hub_location
 
-    def prepare_input(self, state):
+    def prepare_input(self, state: State) \
+            -> Tuple[list['request.Leg'], list[Route]]:
         """Before optimizing, we extract the legs and the routes that we want
         to be considered by the optimization algorithm. For the
         ShuttleSimpleDispatcher, we want to keep only the legs that have not
@@ -53,8 +59,9 @@ class ShuttleHubSimpleDispatcher(Dispatcher):
 
         return selected_next_legs, selected_routes
 
-    def optimize(self, selected_next_legs, selected_routes, current_time,
-                 state):
+    def optimize(self, selected_next_legs: list['request.Leg'],
+                 selected_routes: list[Route], current_time: float,
+                 state: State) -> list[OptimizedRoutePlan]:
         """Each non assigned next leg is assigned to the first route of a
         vehicle available at the hub. For each chosen route the optimization
         algorithm creates a route plan that consists in sending the
