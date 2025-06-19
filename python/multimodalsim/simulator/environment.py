@@ -5,7 +5,8 @@ from typing import Optional, Any
 
 import multimodalsim.optimization.optimization as optimization_module
 import multimodalsim.optimization.state as state_module
-from multimodalsim.simulator.coordinates import Coordinates
+from multimodalsim.config.simulation_config import SimulationConfig
+from multimodalsim.coordinates.coordinates import Coordinates
 import multimodalsim.simulator.request as request
 from multimodalsim.simulator.travel_times import TravelTimes
 from multimodalsim.simulator.vehicle import Vehicle, Route
@@ -48,6 +49,7 @@ class Environment:
                  transfer_synchro = False
                    ):
         self.__current_time = 0
+        self.__estimated_end_time = None
         self.__trips = []
         self.__assigned_trips = []
         self.__non_assigned_trips = []
@@ -59,6 +61,7 @@ class Environment:
         self.__optimization = optimization
         self.__coordinates = coordinates
         self.__travel_times = travel_times
+        self.__simulation_config = simulation_config
 
         self.__optimize_cv = None
         self.__available_connections = None
@@ -267,6 +270,10 @@ class Environment:
     @property
     def optimize_cv(self):
         return self.__optimize_cv
+
+    @property
+    def simulation_config(self) -> SimulationConfig:
+        return self.__simulation_config
 
     @optimize_cv.setter
     def optimize_cv(self, optimize_cv):

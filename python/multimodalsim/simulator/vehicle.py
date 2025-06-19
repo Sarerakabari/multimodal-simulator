@@ -15,7 +15,7 @@ class Vehicle:
         information about the vehicles.
         Properties
         ----------
-        id: int
+        id: str | int
             Unique id
         start_time: float
             Time at which the vehicle is ready to start
@@ -30,6 +30,9 @@ class Vehicle:
         reusable: Boolean
             Specifies whether the vehicle can be reused after it has traveled
             the current route (i.e., its route has no more next stops).
+        name: str
+            The name of the vehicle. If no name is provided, the name is equal
+            to the id of the vehicle.
         position: Location
             Most recent location of the vehicle. Note that the position is not
             updated at every time unit; it is updated only when the event
@@ -40,6 +43,8 @@ class Vehicle:
         status: int
             Represents the different status of the vehicle
             (VehicleStatus(Enum)).
+        tags: list[str]
+            List of tags associated with the vehicle.
     """
 
     MAX_TIME = 7 * 24 * 3600
@@ -47,7 +52,9 @@ class Vehicle:
     def __init__(self, veh_id: str | int, start_time: float, start_stop: Stop,
                  capacity: int, release_time: float,
                  end_time: Optional[float] = None,
-                 mode: Optional[str] = None, reusable: bool = False,route_name=None) -> None:
+                 mode: Optional[str] = None, reusable: bool = False,
+                 name: Optional[str] = None,
+                 tags: Optional[list[str]] = None) -> None:
         self.__id = veh_id
         self.__start_time = start_time
         self.__end_time = end_time if end_time is not None else self.MAX_TIME
@@ -61,7 +68,12 @@ class Vehicle:
         self.__state_machine = state_machine.VehicleStateMachine(self)
         self.__route_name = route_name
 
-    def __str__(self):
+  
+        self.__name = name if name is not None else str(self.__id)
+
+        self.__tags = [] if tags is None else tags
+
+    def __str__(self) -> str:
         class_string = str(self.__class__) + ": {"
         for attribute, value in self.__dict__.items():
             class_string += str(attribute) + ": " + str(value) + ",\n"
@@ -101,7 +113,11 @@ class Vehicle:
         return self.__reusable
 
     @property
-    def position(self):
+    def name(self) -> str:
+        return self.__name
+
+    @property
+    def position(self) -> Location:
         return self.__position
 
     @position.setter
@@ -128,7 +144,11 @@ class Vehicle:
     def route_name(self):
         return self.__route_name
 
-    def __deepcopy__(self, memo):
+    @property
+    def tags(self) -> list[str]:
+        return self.__tags
+
+    def __deepcopy__(self, memo: dict) -> 'Vehicle':
         cls = self.__class__
         result = cls.__new__(cls)
         memo[id(self)] = result

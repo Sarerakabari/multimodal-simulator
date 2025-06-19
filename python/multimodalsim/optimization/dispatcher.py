@@ -386,7 +386,8 @@ class OptimizedRoutePlan:
                          lat: Optional[float] = None,
                          cumulative_distance: Optional[float] = None,
                          legs_to_board: Optional[list['request.Leg']] = None,
-                         legs_to_alight: Optional[list['request.Leg']] = None)\
+                         legs_to_alight: Optional[list['request.Leg']] = None,
+                         capacity: Optional[int] = None)\
             -> list[Stop]:
         """Append a stop to the list of next stops of the route plan.
             Parameters:
@@ -416,6 +417,8 @@ class OptimizedRoutePlan:
                     then the legs that are not explicitly assigned to a stop
                     will automatically be alighted at the first stop
                     corresponding to the destination location.
+                capacity: int or None
+                    The maximal number of passengers that can wait at the stop.
         """
         if self.__next_stops is None:
             self.__next_stops = []
@@ -425,13 +428,14 @@ class OptimizedRoutePlan:
 
         stop = Stop(arrival_time, departure_time,
                     LabelLocation(stop_id, lon, lat),
-                    cumulative_distance=cumulative_distance)
+                    cumulative_distance=cumulative_distance,
+                    capacity=capacity)
 
         if legs_to_board is not None:
-            self.__assign_legs_to_board_to_stop(legs_to_board, stop)
+            self.assign_legs_to_board_to_stop(legs_to_board, stop)
 
         if legs_to_alight is not None:
-            self.__assign_legs_to_alight_to_stop(legs_to_alight, stop)
+            self.assign_legs_to_alight_to_stop(legs_to_alight, stop)
 
         self.__next_stops.append(stop)
 
@@ -486,7 +490,7 @@ class OptimizedRoutePlan:
         first stop corresponding to the destination location."""
         self.__already_onboard_legs.append(leg)
 
-    def __assign_legs_to_board_to_stop(self, legs_to_board, stop):
+    def assign_legs_to_board_to_stop(self, legs_to_board, stop):
         for leg in legs_to_board:
             stop.passengers_to_board.append(leg.trip)
             stop.passengers_to_board_int += 1
@@ -494,7 +498,7 @@ class OptimizedRoutePlan:
                 self.__legs_manually_assigned_to_stops.append(leg)
                 self.assign_leg(leg)
 
-    def __assign_legs_to_alight_to_stop(self, legs_to_alight, stop):
+    def assign_legs_to_alight_to_stop(self, legs_to_alight, stop):
         for leg in legs_to_alight:
             stop.passengers_to_alight.append(leg.trip)
             stop.passengers_to_alight_int += 1

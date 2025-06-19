@@ -1,6 +1,12 @@
 import logging
+import threading
+from typing import Optional, Any
 
 from multimodalsim.config.simulation_config import SimulationConfig
+from multimodalsim.observer.data_collector import DataCollector
+import multimodalsim.observer.environment_observer as env_obs_module
+from multimodalsim.optimization.optimization import Optimization
+from multimodalsim.coordinates.coordinates import Coordinates
 from multimodalsim.simulator.environment import Environment
 from multimodalsim.simulator.event import RecurrentTimeSyncEvent
 from multimodalsim.simulator.event_queue import EventQueue
@@ -20,14 +26,16 @@ class Simulation(object):
                  network=None, environment_observer=None, coordinates=None,
                  travel_times=None, config=None, transfer_synchro = False):
 
-        self.__env = Environment(optimization, network=network,
+        self.__load_config(config)
+
+        self.__env = Environment(optimization, self.__config,
+                                 network=network,
                                  coordinates=coordinates,
                                  travel_times=travel_times,
                                  transfer_synchro = transfer_synchro
                                  )
         self.__env.next_vehicles = self.define_next_vehicles(routes_by_vehicle_id)
         self.__queue = EventQueue(self.__env)
-        self.__environment_observer = environment_observer
 
         config = SimulationConfig() if config is None else config
         self.__load_config(config)
@@ -50,6 +58,11 @@ class Simulation(object):
                                self.__speed,
                                self.__time_step).add_to_queue()
 
+        # To control the execution of the simulation (pause, resume, stop)
+        self.__simulation_cv = threading.Condition()
+        self.__simulation_paused = False
+        self.__simulation_stopped = False
+
     @property
     def data_collectors(self):
         return self.__environment_observer.data_collectors
@@ -60,10 +73,17 @@ class Simulation(object):
         # main loop of the simulation
         while not self.__queue.is_empty():
 
+            self.__check_if_paused()
+
+            with self.__simulation_cv:
+                if self.__simulation_stopped:
+                    break
+
             current_event = self.__queue.pop()
             self.__env.current_time = current_event.time
 
-            if max_time is not None and self.__env.current_time > max_time:
+            if self.__config.max_time is not None \
+                    and self.__env.current_time > self.__config.max_time:
                 break
 
             self.__visualize_environment(current_event, current_event.index,
@@ -82,6 +102,55 @@ class Simulation(object):
         self.__speed = config.speed
         self.__time_step = config.time_step
         self.__update_position_time_step = config.update_position_time_step
+        self.__visualize_environment()
+        self.__clean_up_data_collectors()
+
+    def pause(self):
+        logger.info("Simulation paused")
+        with self.__simulation_cv:
+            self.__simulation_paused = True
+
+    def resume(self):
+        logger.info("Simulation resumed")
+        with self.__simulation_cv:
+            self.__simulation_paused = False
+            self.__simulation_cv.notify()
+
+    def stop(self):
+        logger.info("Simulation stopped")
+        with self.__simulation_cv:
+            # If simulation is paused, resume it first so that it can be
+            # stopped.
+            self.__simulation_paused = False
+            self.__simulation_cv.notify()
+
+            self.__simulation_stopped = True
+
+    def __load_config(self, config):
+        if isinstance(config, str):
+            self.__config = SimulationConfig(config)
+        elif not isinstance(config, SimulationConfig):
+            self.__config = SimulationConfig()
+        else:
+            self.__config = config
+
+        self.__max_time = self.__config.max_time
+        self.__speed = self.__config.speed
+        self.__time_step = self.__config.time_step
+        self.__update_position_time_step = \
+            self.__config.update_position_time_step
+
+    def __initialize_environment_observer(self, environment_observer):
+
+        if environment_observer is not None:
+            for visualizer in environment_observer.visualizers:
+                visualizer.attach_simulation(self)
+                visualizer.attach_environment(self.__env)
+            for data_collector in environment_observer.data_collectors:
+                data_collector.attach_simulation(self)
+                data_collector.attach_environment(self.__env)
+
+        self.__environment_observer = environment_observer
 
     def __find_smallest_release_time(self, objects_list,
                                      smallest_release_time=None):
