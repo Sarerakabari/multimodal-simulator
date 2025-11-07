@@ -38,8 +38,7 @@ class Environment(object):
         """
 
     def __init__(self, optimization, network=None, coordinates=None,
-                 travel_times=None,
-                 transfer_synchro = False
+                 travel_times=None
                    ):
         self.__current_time = 0
         self.__trips = []
@@ -47,7 +46,6 @@ class Environment(object):
         self.__non_assigned_trips = []
         self.__vehicles = []
         self.__routes_by_vehicle_id = {}
-        self.__next_vehicles = {}
 
         self.__network = network
         self.__optimization = optimization
@@ -56,7 +54,7 @@ class Environment(object):
 
         self.__optimize_cv = None
         self.__available_connections = None
-        self.__transfer_synchro = transfer_synchro
+        
 
     @property
     def available_connections(self):
@@ -213,7 +211,7 @@ class Environment(object):
         state_copy.__travel_times = None
         state_copy.optimize_cv = None
         state_copy.__available_connections = self.__optimization.splitter.available_connections
-        state_copy.__next_vehicles = self.__next_vehicles
+       
 
         state_copy.__vehicles = \
             self.__get_non_complete_vehicles(state_copy.__vehicles)
@@ -266,17 +264,9 @@ class Environment(object):
     def optimize_cv(self, optimize_cv):
         self.__optimize_cv = optimize_cv
     
-    @property
-    def next_vehicles(self):
-        return self.__next_vehicles
+
     
-    @next_vehicles.setter
-    def next_vehicles(self, next_vehicles):
-        self.__next_vehicles = next_vehicles
-    
-    @property
-    def transfer_synchro(self):
-        return self.__transfer_synchro
+   
     
 class EnvironmentStatistics:
 

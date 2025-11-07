@@ -47,34 +47,15 @@ class State:
         self.next_legs = self.__get_next_legs(self.trips)
         self.non_assigned_next_legs = self.__get_next_legs(
             self.non_assigned_trips)
-        self.__main_line = None
-        self.__next_main_line = None
+
         self.__available_connections = env_deep_copy.available_connections
-        self.__next_vehicles = env_deep_copy.next_vehicles
+      
 
     @property
     def available_connections(self):
         return self.__available_connections
 
-    @property
-    def main_line(self):
-        return self.__main_line
-    
-    @main_line.setter
-    def main_line(self, main_line):
-        self.__main_line = main_line
 
-    @property
-    def next_main_line(self):
-        return self.__next_main_line
-    
-    @next_main_line.setter
-    def next_main_line(self, next_main_line):
-        self.__next_main_line = next_main_line
-
-    @property
-    def next_vehicles(self):
-        return self.__next_vehicles
     
     def get_trip_by_id(self, trip_id):
         found_trip = None

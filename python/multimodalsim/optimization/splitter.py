@@ -34,7 +34,7 @@ class OneLegSplitter(Splitter):
 class MultimodalSplitter(Splitter):
 
     def __init__(self, network_graph, available_connections=None,
-                 freeze_interval=5, is_from_smartcard_data = False):
+                 freeze_interval=5):
         super().__init__()
         self.__network_graph = network_graph
         self.__available_connections = available_connections \
@@ -42,20 +42,17 @@ class MultimodalSplitter(Splitter):
         self.__freeze_interval = freeze_interval
         self.__trip = None
         self.__state = None
-        self.__is_from_smartcard_data = is_from_smartcard_data
+       
     
     @property
     def available_connections(self):
         return self.__available_connections
     
-    @property
-    def is_from_smartcard_data(self):
-        return self.__is_from_smartcard_data
+   
 
     def split(self, trip, state):
         
-        if self.is_from_smartcard_data:
-            return trip.next_legs
+       
         
         self.__state = state
         self.__trip = trip
@@ -135,7 +132,7 @@ class MultimodalSplitter(Splitter):
                           self.__trip.nb_passengers, self.__trip.release_time,
                           self.__trip.ready_time, self.__trip.due_time,
                           self.__trip)
-                leg.set_cap_vehicle_id(leg_vehicle_id)
+                
                 legs.append(leg)
 
                 leg_vehicle_id = node[1]
@@ -153,7 +150,7 @@ class MultimodalSplitter(Splitter):
                        self.__trip.nb_passengers, self.__trip.release_time,
                        self.__trip.ready_time, self.__trip.due_time,
                        self.__trip)
-        last_leg.set_cap_vehicle_id(path[-1][1])
+        
 
         legs.append(last_leg)
 
@@ -172,4 +169,11 @@ class MultimodalSplitter(Splitter):
                 filtered_legs.append(leg)
 
         return filtered_legs
-    
+class MultimodalSplitter_synchro(MultimodalSplitter):
+
+    def split(self, trip, state):
+        # Nouvelle implémentation de split
+      
+        return trip.next_legs
+
+        

@@ -10,8 +10,10 @@ import networkx as nx
 
 import os.path
 import sys
-sys.path.insert(1, r"C:\Users\kklau\Desktop\Simulator")
 
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+project_root = os.path.normpath(os.path.join(current_dir,'..', '..','..')) 
+sys.path.insert(0, project_root)
 from multimodalsim.config.data_reader_config import DataReaderConfig
 from multimodalsim.simulator.network import Node
 from multimodalsim.simulator.request import Trip, Leg
@@ -264,6 +266,8 @@ class GTFSReader(DataReader):
             requests_reader = csv.reader(requests_file, delimiter=';')
             next(requests_reader, None)
             nb_requests = 1
+            cap_vehicle_id_by_leg={}
+            route_name_by_leg={}
             for row in requests_reader:
                 # release_date_string, release_time_string = row[3].split(" ")
                 # release_time = self.__get_timestamp_from_date_and_time_strings(
@@ -299,6 +303,7 @@ class GTFSReader(DataReader):
                 if legs_stops_pairs_list is not None:
                     leg_number = 1
                     legs = []
+                    
                     for stops_pair in legs_stops_pairs_list:
                         leg_id = trip_id + "_" + str(leg_number)
                         first_stop_id = str(stops_pair[0])
@@ -313,9 +318,12 @@ class GTFSReader(DataReader):
                                   nb_passengers, release_time,
                                   ready_time, due_time, trip)
                         # Assign cap vehicle and route_name to leg (used in transfer synchro dispatcher)
-                        leg.set_cap_vehicle_id(cap_vehicle_id)
-                        route_name = self.__trip_route_dict[cap_vehicle_id]
-                        leg.set_route_name(route_name)
+                        
+
+                        cap_vehicle_id_by_leg[leg.id] = cap_vehicle_id
+
+                        route_name_by_leg[leg.id] = self.__trip_route_dict[cap_vehicle_id]
+                        
                         legs.append(leg)
                         leg_number += 1
                     trip.assign_legs(legs)
@@ -324,7 +332,7 @@ class GTFSReader(DataReader):
                     nb_requests += 1
                 else:
                     logger.warning("Request {} is removed because it uses the vehicle {}.".format(trip_id, cap_vehicle_id))
-        return trips
+        return trips, cap_vehicle_id_by_leg, route_name_by_leg
 
     def get_vehicles(self, release_time_interval=None,
                      min_departure_time_interval=None):
@@ -342,16 +350,18 @@ class GTFSReader(DataReader):
 
         vehicles = []
         routes_by_vehicle_id = {}
+        route_name_by_vehicle_id= {}
 
         for trip_id, stop_time_list in self.__stop_times_by_trip_id_dict. \
                 items():
-            vehicle, next_stops = self.__get_vehicle_and_next_stops(
+            vehicle, next_stops, route_name = self.__get_vehicle_and_next_stops(
                 trip_id, stop_time_list)
 
             routes_by_vehicle_id[vehicle.id] = Route(vehicle, next_stops)
-            vehicles.append(vehicle)
+            vehicles.append(vehicle) 
+            route_name_by_vehicle_id[vehicle.id] = route_name
 
-        return vehicles, routes_by_vehicle_id
+        return vehicles, routes_by_vehicle_id, route_name_by_vehicle_id
 
     def get_network_graph(self, available_connections=None, freeze_interval=5):
 
@@ -463,9 +473,9 @@ class GTFSReader(DataReader):
             if self.__route_mode_dict is not None else None
 
         vehicle = Vehicle(vehicle_id, start_stop_arrival_time, start_stop,
-                          self.__CAPACITY, release_time, end_time, mode, route_name=route_id)
-
-        return vehicle, next_stops
+                          self.__CAPACITY, release_time, end_time, mode)
+        route_name=route_id
+        return vehicle, next_stops, route_name
 
     def __get_next_stops(self, stop_time_list):
         next_stops = []
@@ -535,7 +545,7 @@ class GTFSReader(DataReader):
         """ This function to check if the stop times are in the right order.
         Errors may occur in the data and this function is used to detect them."""
         # Read dictionnary with stop times by route.
-        completename = os.path.join("data","fixed_line","gtfs","test_trip_dir.json")
+        completename = os.path.join(project_root,"data","fixed_line","gtfs","test_trip_dir.json")
         with open(completename) as f:
             stop_order_by_route_and_direction = json.load(f)
         f.close()
@@ -555,6 +565,7 @@ class GTFSReader(DataReader):
                     last_stops_route_dir = stop_order_by_route_and_direction[route][direction]["last_stops"]
                     first_stops_trip = [stop_time_list[i].stop_id for i in range(6)]
                     last_stops_trip = [stop_time_list[-i-1].stop_id for i in range(6)]
+                    
                     for stop_id in first_stops_trip:
                         if int(stop_id) in first_stops_route_dir:
                             keep_trip_id = True
@@ -562,10 +573,12 @@ class GTFSReader(DataReader):
                         if int(stop_id) in last_stops_route_dir:
                             keep_trip_id = True
             if not keep_trip_id:
+                
                 logger.warning("Trip_id {} is removed because it does not respect the direction.".format(trip_id))
                 trip_ids_to_remove.append(trip_id)
         # Update __stop_times_by_trip_id_dict
         for trip_id in trip_ids_to_remove:
+
             self.__stop_times_by_trip_id_dict.pop(trip_id)
         self.__trip_ids_to_remove = trip_ids_to_remove
         logger.info("Number of trips removed: {}/{}".format(len(trip_ids_to_remove), count_all))

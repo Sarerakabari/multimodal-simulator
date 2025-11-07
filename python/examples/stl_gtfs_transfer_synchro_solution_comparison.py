@@ -1,17 +1,23 @@
 import pandas as pd
 import csv
 import os
+import sys
+import sys
+import os
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+sys_dir=os.path.normpath(os.path.join(current_dir,'..'))
+sys.path.insert(0, sys_dir)
+project_root = os.path.normpath(os.path.join(current_dir,'..', '..')) 
 import matplotlib.pyplot as plt
 from stl_gtfs_transfer_synchro import get_output_subfolder
 import matplotlib.lines as mlines
 from ast import literal_eval
-import sys
+
 import numpy as np
 from fixed_line.stl_network_analysis import get_route_dictionary
 import traceback
 
 sys.path.append(os.path.abspath('../..'))
-sys.path.append(r"C:\Users\kklau\Desktop\Simulator\python\examples")
 sys.path.append(r"/home/kollau/Recherche_Kolcheva/Simulator/python/examples")
 
 def analyze_simulations(simulation1_path, simulation2_path, total_transfers, transfers, relative_increase_threshold=1.5):
@@ -831,24 +837,24 @@ def plot_travel_time_change_distribution(instance_name, line_name, base_folder="
 
 if __name__ == "__main__":
     # Define the test instance name
-    instance_name = "gtfs2019-11-27_LargeInstanceAll"
-    route_dict = get_route_dictionary()
-    data_name = 'gtfs2019-11-25_EveningRushHour'
-    for network_style in route_dict:
+    instance_name = "gtfs2019-11-25_LargeInstanceAll"
+    #route_dict = get_route_dictionary()
+    data_name = 'gtfs2019-11-25-Initial_test'
+    #for network_style in route_dict:
     # for network_style in ['151']:
-        print('Getting stats for network style:', network_style)
-        instance_name = data_name+'_'+network_style
-        requests_file_path = os.path.join('data','fixed_line','gtfs','gtfs2019-11-25-EveningRushHour'+network_style)
-        for route_ids_list in [route_dict[network_style]]:
-            for transfer_type in [0,1,2]:
+        #print('Getting stats for network style:', network_style)
+    instance_name = data_name
+    requests_file_path = os.path.join("C:\\Users\Ando\Desktop\Maîtrise\Code\mastersynchro\multimodal-simulator\data\fixed_line\gtfs")
+    for route_ids_list in [["70E","70O"]]:
+            for transfer_type in [2]:
                 try:
                     ## Run the function to compare and plot passenger travel times across different parameters for line 70E
-                    plot_single_line_comparisons(instance_name, requests_file_path=requests_file_path, line_name = route_ids_list, transfer_type = transfer_type, network_style = network_style)
+                    plot_single_line_comparisons(instance_name, requests_file_path=requests_file_path, line_name = route_ids_list, transfer_type = 0)
                 except Exception as e:
                     traceback.print_exc()
             for transfers in [-1, 0, 1]:
                 try:
-                    plot_travel_time_change_distribution(instance_name, route_ids_list, network_style = network_style, transfers= transfers)
+                    plot_travel_time_change_distribution(instance_name, route_ids_list, transfers= transfers)
                 except Exception as e:
                     traceback.print_exc()
                 # print('Could not plot travel time change distribution for:', network_style)

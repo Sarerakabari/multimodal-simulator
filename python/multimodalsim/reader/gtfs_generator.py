@@ -1,5 +1,8 @@
 import pandas as pd
 import os
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+project_root = os.path.normpath(os.path.join(current_dir,'..', '..','..'))  # remonte 2 niveaux
 import logging
 import numpy as np
 from operator import itemgetter
@@ -339,7 +342,7 @@ class GTFSGenerator:
         all_ligns_SN = []
         all_ligns_EO = []
         for date in dates:
-            date_folder = os.path.join("data", "fixed_line", "gtfs", "gtfs" + date)
+            date_folder = os.path.join(project_root,"data", "fixed_line", "gtfs", "gtfs" + date)
             filename = os.path.join(date_folder, "stops_per_line.txt")
             line_names=np.genfromtxt(filename, delimiter = ",", usecols=[0], dtype = [('f0','U12')], names = True)
             for ligndir in line_names:
@@ -435,7 +438,7 @@ class GTFSGenerator:
         dates = ['2019-11-01', '2019-11-04', '2019-11-05', '2019-11-06', '2019-11-07', '2019-11-08', '2019-11-12', '2019-11-13', '2019-11-14', '2019-11-15', '2019-11-18', '2019-11-19', '2019-11-20', '2019-11-21', '2019-11-22', '2019-11-25']
         stops ={}
         for date in dates:
-            date_folder=os.path.join("data", "fixed_line", "gtfs", "gtfs" + date)
+            date_folder=os.path.join(project_root,"data", "fixed_line", "gtfs", "gtfs" + date)
             filename = os.path.join(date_folder, "stops_per_line.txt")
             all_stops = np.genfromtxt(filename, delimiter=",", usecols=[0,1,2,3,4], dtype=[('f0','U12'),('f1','i4'),('f2','i4'),('f3','f4'),('f4','i4')], names=True)
             route_names = np.unique([stop[0] for stop in all_stops])
@@ -453,7 +456,7 @@ class GTFSGenerator:
                     stop_dict[stop_id] = [stop_sequence, distance, 0]
                 stop_dict[stop_id][2] += count
             stops_to_write = sorted([(stop_id, seq, dist, count) for stop_id, [seq, dist, count] in stop_dict.items()], key = itemgetter(1))
-            stops_per_line_month_filepath = os.path.join("data", "fixed_line", "gtfs", "route_data", 'route_stops_' + route_name + '_month.txt')
+            stops_per_line_month_filepath = os.path.join(project_root,"data", "fixed_line", "gtfs", "route_data", 'route_stops_' + route_name + '_month.txt')
             with open(stops_per_line_month_filepath, 'w') as file:
                 file.write("stop_id,sequence,distance,count\n")
                 for stop in stops_to_write:
@@ -461,7 +464,7 @@ class GTFSGenerator:
             file.close()
             new_stops[route_name] = stops_to_write
         # Create one global file containing all stops for all lines
-        stops_per_line_month_filepath = os.path.join("data", "fixed_line", "gtfs", "route_data", "stops_per_line_month.txt")
+        stops_per_line_month_filepath = os.path.join(project_root,"data", "fixed_line", "gtfs", "route_data", "stops_per_line_month.txt")
         with open(stops_per_line_month_filepath, 'w') as file:
             file.write("route_id,stop_id,sequence,distance,count\n")
             for route_name in new_stops:
@@ -473,7 +476,7 @@ class GTFSGenerator:
     def create_travel_times_month_files(self):
         """ Collect data on travel times and dwell times for the whole month. """
         dates = ['2019-11-01', '2019-11-04', '2019-11-05', '2019-11-06', '2019-11-07', '2019-11-08', '2019-11-12', '2019-11-13', '2019-11-14', '2019-11-15', '2019-11-18', '2019-11-19', '2019-11-20', '2019-11-21', '2019-11-22', '2019-11-25']
-        stops_per_line_month_filename = os.path.join("data", "fixed_line", "gtfs", "route_data","stops_per_line_month.txt")
+        stops_per_line_month_filename = os.path.join(project_root,"data", "fixed_line", "gtfs", "route_data","stops_per_line_month.txt")
         all_stops=np.genfromtxt(stops_per_line_month_filename, 
                                 delimiter=",", 
                                 usecols=[0,1,2,3,4], 
@@ -499,12 +502,12 @@ class GTFSGenerator:
                 stops_dict[route_name][stop_id]['dist'] = distance
         for date in dates:
             logger.info("Processing travel times for date "+date)
-            trips_filename = os.path.join("data", "fixed_line", "gtfs", "gtfs" + date, "trips.txt")
+            trips_filename = os.path.join(project_root,"data", "fixed_line", "gtfs", "gtfs" + date, "trips.txt")
             trips = np.genfromtxt(trips_filename, delimiter=",", usecols=[0,1,2,3,4], dtype=[('f0','U12'),('f1','U12'),('f2','U12'),('f3','U12'),('f4','U12')], names=True)
             trips_to_routename_dict = {}
             for trip in trips:
                 trips_to_routename_dict[trip[2]] = trip[0]
-            stop_times_filename = os.path.join("data", "fixed_line", "gtfs", "gtfs" + date, "stop_times_upgrade.txt")
+            stop_times_filename = os.path.join(project_root,"data", "fixed_line", "gtfs", "gtfs" + date, "stop_times_upgrade.txt")
             with open(stop_times_filename, 'r') as file:
                 #Read the header
                 header = file.readline()
@@ -560,7 +563,7 @@ class GTFSGenerator:
                 for dwell_time, event_time in dwells_dict[route][stop_id]:
                     if dwell_time>=0:
                         data.append([stop_id, dwell_time, event_time],)
-            dwell_filename = os.path.join("data", "fixed_line", "gtfs", "route_data", route+"_dwell_times_month.csv")
+            dwell_filename = os.path.join(project_root,"data", "fixed_line", "gtfs", "route_data", route+"_dwell_times_month.csv")
             with open(dwell_filename, 'w', newline='') as dwell_file:
                 writer = csv.writer(dwell_file)
                 # Write the header
@@ -568,7 +571,7 @@ class GTFSGenerator:
                 writer.writerows(data)
             dwell_file.close()
             # Make one travel file per route.
-            travel_time_filename = os.path.join("data", "fixed_line", "gtfs", "route_data", route+"_travel_times_month.csv")
+            travel_time_filename = os.path.join(project_root,"data", "fixed_line", "gtfs", "route_data", route+"_travel_times_month.csv")
             data = []
             for stop_pair in travel_times_dict[route]:
                 for travel_time, event_time in travel_times_dict[route][stop_pair]:
@@ -585,7 +588,7 @@ class GTFSGenerator:
     def create_passenger_flow_month_files(self):
         """ Collect data on passenger flows and transfer flows for the whole month. """
         dates = ['2019-11-01', '2019-11-04', '2019-11-05', '2019-11-06', '2019-11-07', '2019-11-08', '2019-11-12', '2019-11-13', '2019-11-14', '2019-11-15', '2019-11-18', '2019-11-19', '2019-11-20', '2019-11-21', '2019-11-22', '2019-11-25']
-        gtfs_folder = os.path.join("data", "fixed_line", "gtfs")
+        gtfs_folder = os.path.join(project_root,"data", "fixed_line", "gtfs")
         boarding_passengers = {}
         alighting_passengers = {}
         transfer_boarding_passengers = {}

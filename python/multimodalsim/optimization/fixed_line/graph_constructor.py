@@ -1022,8 +1022,10 @@ class Graph:
             # unew = (str)(u.node_stop_id)+' '+u.node_arrival_departure+' '+u.node_type+' '+(str)(u.node_time)
             # vnew = (str)(v.node_stop_id())+' '+v.node_arrival_departure+' '+v.node_type+' '+(str)(v.node_time)
             # print('Edge (',u1,',',v1,',',i,')', 'x=',x.x, 'y=',y.x)
-            display_flows[edge_dict[(u,v,i)]] = round(x.x)
+            valx = x.x if x.x is not None else 0  # ou autre valeur par défaut
+            display_flows[edge_dict[(u,v,i)]] = round(valx)
             # passenger_flows[(unew, vnew, i)] = (int)(x.x)
+            
             bus_flows[edge_dict[(u,v,i)]]=round(y.x)
 
         optimal_value = m.objective_value

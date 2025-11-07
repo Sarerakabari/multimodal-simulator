@@ -113,7 +113,7 @@ class Dispatcher:
         raise NotImplementedError('optimize of {} not implemented'.
                                   format(self.__class__.__name__))
 
-    def transfer_synchro_dispatch(self, state, queue, main_line_id, next_main_line_id):
+    def transfer_synchro_dispatch(self, state, queue):
         raise NotImplementedError('optimize of {} not implemented'.
                                   format(self.__class__.__name__))
 
@@ -179,7 +179,7 @@ class Dispatcher:
             if leg not in route_plan.already_onboard_legs:
                 self.__remove_trip_from_stops(leg, route_plan.route)
 
-
+    # met à jour le nouveau temps de départ et les nouveau arrêt selon le plan
     def __update_route_next_stops(self, route_plan):
         # Update current stop departure time
         if route_plan.route.current_stop is not None:
@@ -223,7 +223,7 @@ class Dispatcher:
                                                                                                                                leg.origin.label, leg.destination.label, leg.assigned_vehicle.id,
                                                                                                                                leg.trip.id, 
                                                                                                                                route.vehicle.id,  
-                                                                                                                               leg.cap_vehicle_id))
+                                                                                                                               ))
         else:
             self.__add_passenger_to_board(leg.trip, boarding_stop)
             self.__add_passenger_to_alight(leg.trip, alighting_stop)

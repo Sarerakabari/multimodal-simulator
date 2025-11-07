@@ -18,8 +18,7 @@ logger = logging.getLogger(__name__)
 class Optimize(ActionEvent):
     def __init__(self, time, queue, multiple_optimize_events=None,
                  batch=None, max_optimization_time=None, asynchronous=None,
-                 transfer_synchro = False,
-                 main_line = None, next_main_line = None):
+                 main_line = None):
         self.__load_parameters_from_config(queue.env.optimization,
                                            multiple_optimize_events, batch,
                                            max_optimization_time, asynchronous)
@@ -27,13 +26,12 @@ class Optimize(ActionEvent):
             # Round to the smallest integer greater than or equal to time that
             # is also a multiple of batch.#
             time = time + (batch - (time % batch)) % batch
-        self.__transfer_synchro = transfer_synchro
+        
         super().__init__('Optimize', queue, time,
                          event_priority=self.VERY_LOW_PRIORITY,
                          state_machine=queue.env.optimization.state_machine)
-        self.__transfer_synchro = transfer_synchro
         self.__main_line = main_line
-        self.__next_main_line = next_main_line
+       
 
     def process(self, env):
         if self.state_machine.current_state.status \
@@ -69,17 +67,15 @@ class Optimize(ActionEvent):
     def __optimize_synchronously(self, env):
         env.optimization.state.freeze_routes_for_time_interval(
             env.optimization.freeze_interval)
-        if self.transfer_synchro:
-            optimization_result = env.optimization.transfer_synchro_dispatch(
-                env.optimization.state, self.queue, self.__main_line, self.__next_main_line)
-        else:
-            optimization_result = env.optimization.dispatch(
-                env.optimization.state)
+
+        optimization_result = env.optimization.transfer_synchro_dispatch(
+                env.optimization.state, self.queue)
+
 
         env.optimization.state.unfreeze_routes_for_time_interval(
             env.optimization.freeze_interval)
 
-        EnvironmentUpdate(optimization_result, self.queue, self.transfer_synchro).add_to_queue()
+        EnvironmentUpdate(optimization_result, self.queue).add_to_queue()
 
     def __optimize_asynchronously(self, env):
         hold_cv = Condition()
@@ -139,9 +135,7 @@ class Optimize(ActionEvent):
                               self.queue).add_to_queue()
             hold_event.cv.notify()
     
-    @property
-    def transfer_synchro(self):
-        return self.__transfer_synchro
+
     
     @staticmethod
     def dispatch(dispatch_function, state):
@@ -168,16 +162,16 @@ class Optimize(ActionEvent):
 
 
 class EnvironmentUpdate(ActionEvent):
-    def __init__(self, optimization_result, queue, transfer_synchro=False):
+    def __init__(self, optimization_result, queue):
         super().__init__('EnvironmentUpdate', queue,
                          state_machine=queue.env.optimization.state_machine)
         self.__optimization_result = optimization_result
-        self.__transfer_synchro = transfer_synchro
+
 
     def _process(self, env):
-        if self.__transfer_synchro:
-            for trip in self.__optimization_result.modified_requests:
-                env.update_changed_assigned_trips(trip.id, trip)
+        
+        for trip in self.__optimization_result.modified_requests:
+            env.update_changed_assigned_trips(trip.id, trip)
         for trip in [trip for trip in self.__optimization_result.modified_requests if trip in env.non_assigned_trips]:
             next_legs = trip.next_legs
             next_leg_assigned_vehicle_id = trip.next_legs[0].assigned_vehicle.id if trip.next_legs[0].assigned_vehicle is not None else None
@@ -207,8 +201,8 @@ class EnvironmentUpdate(ActionEvent):
 
             modified_assigned_legs = [leg for leg in route.assigned_legs
                                       if leg.trip.id in modified_trips_ids]
-            if self.__transfer_synchro:
-                modified_assigned_legs = list(set([leg for leg in route.assigned_legs + route.onboard_legs
+            
+            modified_assigned_legs = list(set([leg for leg in route.assigned_legs + route.onboard_legs
                                           if leg.trip.id in modified_trips_ids]))
 
             next_stops = route.next_stops
@@ -216,7 +210,7 @@ class EnvironmentUpdate(ActionEvent):
                 veh.id, current_stop_modified_passengers_to_board, next_stops,
                 current_stop_departure_time, modified_assigned_legs)
             vehicle_event_process.VehicleNotification(
-                route_update, self.queue, self.__transfer_synchro).add_to_queue()
+                route_update, self.queue).add_to_queue()
 
         EnvironmentIdle(self.queue).add_to_queue()
 

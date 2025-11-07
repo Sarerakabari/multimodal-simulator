@@ -34,9 +34,7 @@ class VehicleReady(Event):
         env.add_route(self.__route, self.__vehicle.id)
         optimization_event.Optimize(env.current_time,
                                     self.queue,
-                                    transfer_synchro = env.transfer_synchro,
-                                    main_line = self.__route.vehicle.id if env.transfer_synchro else None,
-                                    next_main_line = env.next_vehicles[self.__route.vehicle.id] if env.transfer_synchro else None).add_to_queue()
+                                    main_line = self.__route.vehicle.id).add_to_queue()
 
         VehicleWaiting(self.__route, self.queue).add_to_queue()
 
@@ -64,8 +62,7 @@ class VehicleWaiting(ActionEvent):
         self.__route = route
 
     def _process(self, env):
-        if env.transfer_synchro == False:
-            optimization_event.Optimize(env.current_time, self.queue).add_to_queue()
+        
             
         if len(self.__route.requests_to_pickup()) > 0:
             VehicleBoarding(self.__route, self.queue).add_to_queue()
@@ -140,11 +137,7 @@ class VehicleDeparture(ActionEvent):
             actual_arrival_time = self.__route.next_stops[0].arrival_time
 
         self.__route.depart()
-        # optimization_event.Optimize(env.current_time,
-        #                             self.queue,
-        #                             transfer_synchro = env.transfer_synchro,
-        #                             main_line = self.__route.vehicle.id if env.transfer_synchro else None,
-        #                             next_main_line = env.next_vehicles[self.__route.vehicle.id] if env.transfer_synchro else None).add_to_queue()
+       
         VehicleArrival(self.__route, self.queue,
                        actual_arrival_time).add_to_queue()
 
@@ -175,9 +168,8 @@ class VehicleArrival(ActionEvent):
         ### REALLY IMPORTANT TO RE-OPTIMIZE AFTER PASSENGERALIGHTING BECAUSE RELEASED PASSENGERS CAN BE RE-ASSIGNED###
         optimization_event.Optimize(env.current_time,
                                     self.queue,
-                                    transfer_synchro = env.transfer_synchro,
-                                    main_line = self.__route.vehicle.id if env.transfer_synchro else None,
-                                    next_main_line = env.next_vehicles[self.__route.vehicle.id] if env.transfer_synchro else None).add_to_queue()            
+                                    main_line = self.__route.vehicle.id
+                                    ).add_to_queue()            
         
         if len(passengers_to_alight_copy) == 0:
             VehicleWaiting(self.__route, self.queue).add_to_queue()
@@ -206,13 +198,12 @@ class VehicleArrival(ActionEvent):
 
 
 class VehicleNotification(Event):
-    def __init__(self, route_update, queue, transfer_synchro=False):
+    def __init__(self, route_update, queue):
         self.__env = None
         self.__route_update = route_update
         self.__vehicle = queue.env.get_vehicle_by_id(
             self.__route_update.vehicle_id)
         self.__route = queue.env.get_route_by_vehicle_id(self.__vehicle.id)
-        self.__transfer_synchro = transfer_synchro
         super().__init__('VehicleNotification', queue)
 
     def _process(self, env):
@@ -254,29 +245,26 @@ class VehicleNotification(Event):
             actual_modified_assigned_legs = \
                 self.__replace_copy_legs_with_actual_legs(
                     self.__route_update.modified_assigned_legs)
-            if self.__transfer_synchro:
-                for leg in actual_modified_assigned_legs:
-                    # Case 1: Onboard leg that was changed due to a skip-stop tactic (change of alighting stop)
-                    onboard_leg_to_remove = next((l for l in self.__route.onboard_legs if l.id == leg.id), None)
-                    if onboard_leg_to_remove is not None:
-                        self.__route.onboard_legs.remove(onboard_leg_to_remove)
-                        self.__route.onboard_legs.append(leg)
-                        continue
-                    # Case 2: Assigned leg that was unassigned due to a skip-stop tactic (impossible to board at the skipped stop)
-                    assigned_leg_to_remove = next((l for l in self.__route.assigned_legs if l.id == leg.id), None)
-                    if assigned_leg_to_remove is not None:
-                        self.__route.assigned_legs.remove(assigned_leg_to_remove)
-                        leg.assigned_vehicle = None
-                        self.__env.remove_assigned_trip(assigned_leg_to_remove.trip.id)
-                        self.__env.add_non_assigned_trip(leg.trip)
-                        continue
-                    # Case 3: A leg that was unassigned before optimization and is now assigned
-                    if assigned_leg_to_remove is None and onboard_leg_to_remove is None and leg not in self.__route.assigned_legs:
-                        self.__route.assigned_legs.append(leg)
-            else:
-                for leg in actual_modified_assigned_legs:
-                    if leg not in self.__route.assigned_legs:
-                        self.__route.assigned_legs.append(leg)
+
+            for leg in actual_modified_assigned_legs:
+                # Case 1: Onboard leg that was changed due to a skip-stop tactic (change of alighting stop)
+                onboard_leg_to_remove = next((l for l in self.__route.onboard_legs if l.id == leg.id), None)
+                if onboard_leg_to_remove is not None:
+                    self.__route.onboard_legs.remove(onboard_leg_to_remove)
+                    self.__route.onboard_legs.append(leg)
+                    continue
+                # Case 2: Assigned leg that was unassigned due to a skip-stop tactic (impossible to board at the skipped stop)
+                assigned_leg_to_remove = next((l for l in self.__route.assigned_legs if l.id == leg.id), None)
+                if assigned_leg_to_remove is not None:
+                    self.__route.assigned_legs.remove(assigned_leg_to_remove)
+                    leg.assigned_vehicle = None
+                    self.__env.remove_assigned_trip(assigned_leg_to_remove.trip.id)
+                    self.__env.add_non_assigned_trip(leg.trip)
+                    continue
+                # Case 3: A leg that was unassigned before optimization and is now assigned
+                if assigned_leg_to_remove is None and onboard_leg_to_remove is None and leg not in self.__route.assigned_legs:
+                    self.__route.assigned_legs.append(leg)
+
 
         # Update polylines
         if env.coordinates is not None:

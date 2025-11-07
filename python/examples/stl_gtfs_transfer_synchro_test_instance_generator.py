@@ -286,13 +286,13 @@ if __name__ == "__main__":
     #     duration = 21600 # 6 hours
     #     generate_duration_test_instance('LargeInstanceAll','gtfs'+date, start_time = start_time, duration = duration, route_ids = route_ids)  # 3 hours
     date = "2019-11-25"
-    route_ids=[]
+    route_ids=['70E','70O']
     start_time = 15*3600  # 3pm 
     duration = 2*3600  # 4 hours to account for the slack time.
-    general_instance_name = "EveningRushHour"
+    general_instance_name = "test_de_performance"
     route_dict = get_route_dictionary()
-    for network_style in route_dict.keys():
-        route_ids = route_dict[network_style]
-        instance_name = general_instance_name + network_style
-        for PI in [True, False]:
-            generate_duration_test_instance(name= instance_name, date='gtfs'+date, start_time = start_time, duration = duration, route_ids = route_ids, PI = PI)
+    #for network_style in route_dict.keys():
+     #   route_ids = route_dict[network_style]
+    instance_name = general_instance_name 
+    #for PI in [True, False]:
+    generate_duration_test_instance(name= instance_name, date='gtfs'+date, start_time = start_time, duration = duration, route_ids = route_ids, PI = False)

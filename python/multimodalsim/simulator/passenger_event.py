@@ -36,9 +36,7 @@ class PassengerRelease(Event):
             legs = env.optimization.split(self.__trip, env) # Diviser le trajet en legs si nécessaire
             self.__trip.assign_legs(legs) # Assigner les legs au trajet
         
-        if env.transfer_synchro == False: # Vérifier si la synchronisation de transfert est désactivée
-            optimization_event_process.Optimize(
-                env.current_time, self.queue).add_to_queue() # Déclencher l'optimisation
+       
 
         return 'Done processing Passenger Release'
 
@@ -171,8 +169,6 @@ class PassengerAlighting(ActionEvent):
             env.remove_assigned_trip(self.__trip.id)
             env.add_non_assigned_trip(self.__trip)
 
-            if env.transfer_synchro == False:
-                optimization_event_process.Optimize(
-                    env.current_time, self.queue).add_to_queue()
+        
 
         return 'Done processing Passenger Alighting process'

@@ -97,8 +97,8 @@ class Leg(Request):
                          ready_time, due_time)
         self.__assigned_vehicle = None
         self.__trip = trip
-        self.__cap_vehicle_id = None
-        self.__route_name = None
+       
+        
 
         self.__boarding_time = None
         self.__alighting_time = None
@@ -106,32 +106,12 @@ class Leg(Request):
     @property
     def assigned_vehicle(self):
         return self.__assigned_vehicle
-
+    # à voir
     @assigned_vehicle.setter
     def assigned_vehicle(self, vehicle):
         """Assigns a vehicle to the leg"""
         self.__assigned_vehicle = vehicle
-        if vehicle is None:
-            self.__cap_vehicle_id = None
-        elif self.__cap_vehicle_id is None or self.__cap_vehicle_id != vehicle.id:
-            self.__cap_vehicle_id = vehicle.id
-        if self.__route_name is None or (vehicle!= None and self.__route_name != vehicle.route_name):
-            self.__route_name = vehicle.route_name
-    
-    @property
-    def cap_vehicle_id(self):
-        return self.__cap_vehicle_id
-    
-    def set_cap_vehicle_id(self, vehicle_id):
-        self.__cap_vehicle_id = vehicle_id
 
-    @property
-    def route_name(self):
-        return self.__route_name
-    
-    def set_route_name(self, route_name):
-        self.__route_name = route_name
-        
     @property
     def trip(self):
         return self.__trip
