@@ -1,11 +1,19 @@
 import logging
+import sys
+import os
+
+from multimodalsim.simulator import request
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+sys_dir=os.path.normpath(os.path.join(current_dir,'..','..', '..'))
+sys.path.insert(0, sys_dir)
+project_root = os.path.normpath(os.path.join(current_dir,'..', '..','..', '..'))
 
 from multimodalsim.optimization.optimization import OptimizationResult
 from multimodalsim.optimization.dispatcher import OptimizedRoutePlan, Dispatcher
 from multimodalsim.config.fixed_line_dispatcher_config import FixedLineDispatcherConfig
 from multimodalsim.simulator.vehicle import Vehicle, Route, Stop
 from multimodalsim.simulator.vehicle_event import VehicleReady
-from multimodalsim.optimization.fixed_line.graph_constructor import Graph
+from multimodalsim.optimization.fixed_line.graph_constructor import *
 
 import geopy.distance
 import random 
@@ -20,7 +28,7 @@ from statistics import mean
 from collections import Counter
 import traceback
 from typing import List
-
+random.seed(2)
 logger = logging.getLogger(__name__)
 
 class FixedLineDispatcher(Dispatcher):
@@ -537,9 +545,13 @@ class FixedLineDispatcher(Dispatcher):
             - ss: boolean, the result of the OSO algorithm for the skip-stop tactic.
             - h_and_time: tuple, the result of the OSO algorithm for the hold tactic and the corresponding end of hold time
                 (The output hold time is already treated in the OSO algorithm)"""
+        #extraction de la ligne 
         route = self.get_route_by_vehicle_id(state, state.main_line)
+        # ligne suivant
         next_route = self.get_route_by_vehicle_id(state, state.next_main_line)
+        #valeur booleen pour vérifié si la ligne est à optimisé
         enter_optimization_bool = self.route_name in self.routes_to_optimize_names
+        #semble vérifier si il y a des connéction faisable entre les arrêt et envoi une variable booleen qui verifie si le bus est interessant
         if len(self.transfer_hubs) > 0:
             is_transfer_hub_in_route = False
             if route is not None:
@@ -554,6 +566,7 @@ class FixedLineDispatcher(Dispatcher):
             #     print('Entering transfer hub radius for route {} and hub {}.'.format(self.route_name, int(stop.location.label)))
 
         ### If re-optimizing at arrival, current stop is not None. If optimizing at departure, current stop is None.
+        # retourne une décision de base si la variable booleen est faux
         if (not enter_optimization_bool) or \
            (self.algo == 0) or \
            (route is None) or (next_route is None) or \
@@ -561,16 +574,19 @@ class FixedLineDispatcher(Dispatcher):
            len(route.next_stops) == 0:
             # logger.info("Algo={}, Main route= {}, Next bus on main route = {}, bus has not departed yet = {}, number next stops = {}".format(str(self.algo), route is None, next_route is None, route.current_stop is not None, len(route.next_stops)==0))
             return(False, False, (False, -1))
-        
-        # Get bus trip ids for the main line and the next main line
+        prev_bus={}
+        # numero du bus
         bus_trip_id = route.vehicle.id
+        prev_bus[bus_trip_id]=-1
+        # numero du prochain bus
         bus_next_trip_id = next_route.vehicle.id
-
-        # get first stop on first main line bus
+        
+        prev_bus[bus_next_trip_id]=bus_next_trip_id
+        # le premier stop
         stop = route.next_stops[0] # Next stops are the same for re-opt at arrival or departure
         stop_id = int(stop.location.label)
 
-        # Get all stops in horizon for both routes
+        # les arrêt qui seront utilisé
         stops = route.next_stops[: min(self.horizon, len(route.next_stops))]
         last_stop_id = stops[-1].location.label
         stops_second = next_route.get_next_route_stops(last_stop_id)
@@ -578,14 +594,16 @@ class FixedLineDispatcher(Dispatcher):
         # logger.info('Main line is {} and next main line is {} and first stop is {}, last stop is {}'.format(route.vehicle.id, next_route.vehicle.id, stop_id, last_stop_id))
 
         #Get initial flows for both buses
+        #les passager à bord 
         initial_flows = {}
         initial_flows[bus_trip_id] = int(len(route.onboard_legs)) # Onboard legs are the same for re-opt at arrival or departure (alighting passengers already alighted)
         initial_flows[bus_next_trip_id] = int(len(next_route.onboard_legs))
 
-        # Get departure times from last visited stop before the control horizon
+        #les temps de départ du derniere arrêt
         last_departure_times = {}
         # At this point in time tactics for the current stop have been decided and applied so the departure time is known. 
         last_departure_times[bus_trip_id] = route.current_stop.departure_time # we know current stop is not None.
+        # le dernier stop visiter ou le premier des prochains
         last_departure_times[bus_next_trip_id] = next_route.previous_stops[-1].departure_time if next_route.previous_stops != [] else next_route.next_stops[0].arrival_time -1
         if last_departure_times[bus_trip_id] == last_departure_times[bus_next_trip_id]:
             last_departure_times[bus_next_trip_id]+=1
@@ -613,6 +631,57 @@ class FixedLineDispatcher(Dispatcher):
         if self.__algo == 2: # Regret Algorithm
             tactic_regrets_dict = self.create_tactics_dict(last_stop)
 
+      
+        import pandas as pd
+        import sys
+
+        def convert_and_save_stop_dict_to_csvs(stop_dict):
+            """
+            Transforme un dictionnaire {clé: List[Stop]} en DataFrames enrichis et sauvegarde chaque
+            DataFrame sous forme CSV avec un nom de fichier "{key}.csv".
+
+            Paramètres
+            ----------
+            stop_dict : dict
+                Dictionnaire contenant des listes d'objets Stop, avec des clés (ex. "ligne_70O").
+            """
+            def extract_stop_attributes(stops_list):
+                data = []
+                for stop in stops_list:
+                    data.append({
+                        "stop_id": stop.location.label if stop.location else None,
+                        "arrival_time": stop.arrival_time,
+                        "departure_time": stop.departure_time,
+                        "min_departure_time": stop.min_departure_time,
+                        "cumulative_distance": stop.cumulative_distance,
+                        "planned_arrival_time": stop.planned_arrival_time,
+                        "planned_departure_time_from_origin": stop.planned_departure_time_from_origin,
+                        "nb_to_board": stop.passengers_to_board_int,
+                        "nb_to_alight": stop.passengers_to_alight_int,
+                        "skip_stop": stop.skip_stop,
+                        "speedup": stop.speedup,
+                        "boarded_passengers_ids": [req.id for req in stop.boarded_passengers],
+                        "passengers_to_board_ids": [req.id for req in stop.passengers_to_board],
+                        "boarding_passenger_ids": [req.id for req in stop.boarding_passengers],
+                        "alighting_passenger_ids": [req.id for req in stop.passengers_to_alight],
+                        "alighting_passengers_ids": [req.id for req in stop.alighting_passengers],
+                        "alighting_passengers_ids": [req.id for req in stop.alighted_passengers]
+                    })
+                return pd.DataFrame(data)
+
+            
+
+            for key, stops in stop_dict.items():
+                df = extract_stop_attributes(stops)
+                file_path = f"{key}.csv"
+                df.to_csv(file_path, index=False)
+                print(f"[✔] Sauvegardé : {file_path}")
+
+
+
+
+
+
         # Start the simulation
         G_gen = None
         i = 0
@@ -632,6 +701,8 @@ class FixedLineDispatcher(Dispatcher):
                                                                   transfer_times = transfer_times
                                                                   )
                     # Step b: Build graph (integrating all allowed tactics) from generated scenario
+                
+                    
                     G_gen = Graph.build_graph_with_tactics(first_trip_id = bus_trip_id,
                                                            bus_trips = bus_trips,
                                                             transfers = transfers,
@@ -643,12 +714,23 @@ class FixedLineDispatcher(Dispatcher):
                                                             global_skip_stop_is_allowed = self.skip_stop,
                                                             simu = True,
                                                             last_stop = int(last_stop.location.label) if last_stop != -1 else -1)
-                    # G_gen.display_graph(display_flows = False, name = 'Test_graph')
+                    
+                    remove_empty_puits(G_gen) 
 
+                    # link_positive_to_future_departures_or_sink(G_gen)
+
+                    # print("Arêtes ajoutées pour les cas sans départ futur :")
+                    # for e in G_gen.edges:
+                    #     if e.weight == 2160:
+                    #         print(f"{e.origin.node_stop_id} (flow={e.origin.node_flow}) "
+                    #             f"→ {e.destination.node_stop_id} (flow={e.destination.node_flow}), poids={e.weight}")
+                    
+                             
+                 
                     # Step c: Build and solve model based on graph, and get solution
                     max_departure_time, hold, speedup, skip_stop, bus_flows, optimal_value, runtime = self.get_solution_for_graph(G_gen,
                                                                                                                                   stop_id,
-                                                                                                                                  bus_trip_id)
+                                                                                                                                  bus_trip_id,bus_trips,prev_bus)
 
                     # Step d: Update tactics dictionary
                     if self.algo == 2: # Regret Algorithm
@@ -662,7 +744,8 @@ class FixedLineDispatcher(Dispatcher):
                                                                               optimal_value,
                                                                               last_departure_times = last_departure_times,
                                                                               initial_flows = initial_flows,
-                                                                              last_stop = int(last_stop.location.label) if last_stop != -1 else -1)
+                                                                              last_stop = int(last_stop.location.label) if last_stop != -1 else -1,
+                                                                              prev_bus=prev_bus)
                     elif self.algo == 1 or self.algo == 3: # Deterministic or Perfect Information
                         i = self.algo_parameters["nbr_simulations"]
                         j_try = int(self.algo_parameters["j_try"]) + 1
@@ -671,17 +754,54 @@ class FixedLineDispatcher(Dispatcher):
                     i += 1
                 except Exception as e:
                     # if G_gen is not None:
-                    #     G_gen.display_graph(display_flows = False, name = 'Error_OSO')
+                        #G_gen.display_graph(display_flows = False, name = 'Error_OSO')
                     # Log the error message and traceback
+                    
                     error_message = 'Problem in OSO with route {} trip {} at stop {}: scenario {}/{}'.format(self.route_name, bus_trip_id, stop_id, j_try, self.algo_parameters["j_try"])
                     error_traceback = traceback.format_exc()  # Get full traceback
                     # with open(self.__error_file_path, "a") as f:
                     #     f.write('Error message: {}\n'.format(error_message))
                     #     f.write('Error traceback: {}\n'.format(error_traceback))
+                    # convert_and_save_stop_dict_to_csvs(bus_trips)
+                    #G_gen.show_graph()
+                    
+                    # traceback.print_exc()
+
+                    # convert_and_save_stop_dict_to_csvs(bus_trips)
+                    # #Graph.save_edges_incident_to_nonzero_flow_nodes_differentiated_with_loop(G_gen, "corruption2.csv")
+                   
+                    # Graph.save_graph_nodes_to_csv(G_gen,"corruption.csv")
+
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42423, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42421, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=41757, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=41755, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42722, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42720, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42716, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=46260, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=46261, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42523, figsize=(10, 6), node_size=30, show_labels=True)
+                    # Graph.display_edges_for_stop(G_gen, stop_id=42525, figsize=(10, 6), node_size=30, show_labels=True)
+                    #Graph.display_graph_temporal_layout_clean_labels(G_gen, figsize=(16, 10), node_size=30, show_labels=True,only_edges_incident_to_nonzero_flow=True)
+                    # Graph.display_graph_temporal_layout_clean_labels(G_gen, figsize=(16, 10), node_size=30, show_labels=True,only_edges_incident_to_nonzero_flow=False)
+                    # remove_empty_puits(G_gen)
+                    # Graph.display_graph_temporal_layout_clean_labels(G_gen, figsize=(16, 10), node_size=30, show_labels=True,only_edges_incident_to_nonzero_flow=False)
+                    
+                    # for e in deleted_edges:
+                    #     print(f"Supprimée : {e.origin.node_stop_id} (bus={e.origin.node_bus},(time={e.origin.node_time}, flow={e.origin.node_flow}) "
+                    #     f"→ {e.destination.node_stop_id} (bus={e.destination.node_bus} ,(time={e.destination.node_time}, flow={e.destination.node_flow})")
+                   # Graph.display_graph_temporal_layout_clean_labels(G_gen, figsize=(16, 10), node_size=30, show_labels=True,only_edges_incident_to_nonzero_flow=False)
+                    #Graph.save_graph_nodes_to_csv(G_gen,"corruption_cleaner.csv")
+                    #Graph.display_graph_temporal_layout_clean_labels_2(G_gen, figsize=(16, 10), node_size=30, show_labels=True,only_edges_incident_to_nonzero_flow=True)
+                    #Graph.display_graph_temporal_layout_clean_labels_2(G_gen, figsize=(16, 10), node_size=30, show_labels=True,only_edges_incident_to_nonzero_flow=False)
                     # f.close()
                     # Print the error message and traceback
-                    # traceback.print_exc()
-                    # logger.warning('Problem with scenario {}/{} and stop_id {}'.format(j_try, self.algo_parameters["j_try"], stop_id))
+
+                    
+                    
+                    
+                    #logger.warning('Problem with scenario {}/{} and stop_id {}'.format(j_try, self.algo_parameters["j_try"], stop_id))
             else:
                 # Log the error message
                 error_message = 'The scenario generation failed after {} tries.'.format(j_try)
@@ -772,8 +892,11 @@ class FixedLineDispatcher(Dispatcher):
               transfer_stop_times[stop_id : int] = [(arrival_time : int, route : Route), interval : int]"""
 
         #Get potential transfers stops
+        #les correspondance potentiel
         available_connections = state.available_connections
+        # extraction des id des arrêt d'interêt
         all_stops = [int(stop.location.label) for stop in stops] #stop_id of all stops on main route
+        # les arrêts avec des potententiel transfert
         potential_connecting_stops = [] # Stops that have transfers with stops with different stop_id
         for stop in all_stops:
             if stop in available_connections:
@@ -783,16 +906,19 @@ class FixedLineDispatcher(Dispatcher):
         next_vehicles = state.next_vehicles
 
         # Get potential transfer routes: consider all routes, not just selected routes as we don't know in advance where passengers will transfer.
+        # avoir toute les ligne autre que le main
         all_routes = [route for route in state.route_by_vehicle_id.values() if route.vehicle.id != state.main_line and route.vehicle.id != state.next_main_line]
         
         # For each stop, note potential transfer routes and their arrival times.
         transfer_stop_times = {}
         for route in all_routes:
+            # les stop à teste : maintenant et les prochains
             stops_to_test = []
             if route.current_stop is not None:
                 stops_to_test.append(route.current_stop)
             if route.next_stops is not None:
                 stops_to_test += route.next_stops
+
             for stop in stops_to_test:
                 stop_id_to_test = None
                 if int(stop.location.label) in all_stops: # stop_id of transfer route appears on main route
@@ -804,6 +930,7 @@ class FixedLineDispatcher(Dispatcher):
                     min_time = main_line_stop.arrival_time - time_to_prev
                     max_time = main_line_stop.departure_time + time_to_next
                     if stop.arrival_time > min_time and stop.arrival_time < max_time:
+
                         current_stop_arrival_time_estimation = self.get_arrival_time_estimation(route, stop, type_transfer_arrival_time)
                         interval = 1800 # default interval is 30 minutes
                         next_route_id = next_vehicles[route.vehicle.id] if route.vehicle.id in next_vehicles else None
@@ -975,7 +1102,7 @@ class FixedLineDispatcher(Dispatcher):
             TBoarding: clusters of boarding transferring passengers at stops
             TAlighting: clusters of alighting transferring passengers at stops
         """
-        pathtofile = os.path.join("data", "fixed_line", "gtfs", "route_data")
+        pathtofile = os.path.join(project_root,"data", "fixed_line", "gtfs", "route_data")
 
         # Get historical data for the route
         stop_to_stop_pairs, dwells = self.get_route_and_stop_historical_data(route_name, pathtofile=pathtofile)
@@ -1709,7 +1836,8 @@ class FixedLineDispatcher(Dispatcher):
                                    optimal_value: int,
                                    last_departure_times : dict,
                                    initial_flows : dict,
-                                   last_stop : int = -1):
+                                   last_stop : int = -1,
+                                   prev_bus={}):
         """Updates the tactics dictionary T given the optimal tactic, and calculates the regret of all other tactics.
         Inputs:
             - T: dict, the tactics dictionary
@@ -1801,7 +1929,8 @@ class FixedLineDispatcher(Dispatcher):
                                             optimal_value = optimal_value,
                                             display_graph_bool = (tactic in ['ss', 'sp', 'sp_hp', 'sp_t']),
                                             tactic = tactic,
-                                            optimal_tactic = optimal_tactic)
+                                            optimal_tactic = optimal_tactic,
+                                            prev_bus=prev_bus)
             if tactic == 'sp_t' or tactic == 'h_t':
                 tactic_regrets_dict[tactic][0] += regret
                 tactic_regrets_dict[tactic][1].append(tactic_bus_trips[trip_id][0].departure_time)
@@ -1809,7 +1938,7 @@ class FixedLineDispatcher(Dispatcher):
                 tactic_regrets_dict[tactic] += regret
         return(tactic_regrets_dict)
     
-    def get_solution_for_graph(self, G_generated: Graph, stop_id : int, trip_id: str): 
+    def get_solution_for_graph(self, G_generated: Graph, stop_id : int, trip_id: str,bus_trips, prev_bus= {}): 
         """
         This function generates the solution for a graph.
         Given a graph G_generated, a stop_id and a trip_id, it first converts the graph to a model format,
@@ -1826,9 +1955,13 @@ class FixedLineDispatcher(Dispatcher):
             - bus_flows: dict, the bus flows in the solution, shows the path of each bus in the graph.
             - optimal_value: int, the value of the objective function when using the optimal tactic
             - runtime: int, the runtime of the optimization"""
+        keys, pos,  keys_pos =build_flow_dicts_with_matching(G_generated, bus_trips)
+
+       
+        
         optimal_value, bus_flows, display_flows, runtime = G_generated.build_and_solve_model_from_graph("GenGraph",
                                                                                          verbose = False, 
-                                                                                         out_of_bus_price = self.general_parameters["out_of_bus_price"])
+                                                                                         out_of_bus_price = self.general_parameters["out_of_bus_price"],keys = keys,pos=pos,keys_pos=keys_pos,prev_bus=prev_bus)
         # G_generated.display_graph(display_flows = display_flows, name = 'Test_graph')
         max_departure_time, hold, speedup, skip_stop = Graph.extract_tactics_from_solution(bus_flows, stop_id, trip_id)
         return(max_departure_time, hold, speedup, skip_stop, bus_flows, optimal_value, runtime)
@@ -1985,7 +2118,8 @@ class FixedLineDispatcher(Dispatcher):
                           optimal_value : int,
                           display_graph_bool = False,
                           tactic = '',
-                          optimal_tactic = ''):
+                          optimal_tactic = '',
+                          prev_bus={}):
         """
         This function calculates the regret of a tactic given the optimal value.
         
@@ -2007,17 +2141,23 @@ class FixedLineDispatcher(Dispatcher):
                                                                             time_step = self.general_parameters["step"],
                                                                             price = self.general_parameters["price"],
                                                                             od_dict = {})
+        
+
+        remove_empty_puits(G) 
+
+        keys, pos,  keys_pos =build_flow_dicts_with_matching(G, tactic_bus_trips)
+
         try:
             optimal_value_for_tactic, bus_flows, display_flows, runtime = G.build_and_solve_model_from_graph("Gen_offline"+str(stop_id),
                                                                                                          verbose = False,
-                                                                                                         out_of_bus_price = self.general_parameters["out_of_bus_price"])
+                                                                                                         out_of_bus_price = self.general_parameters["out_of_bus_price"], keys = keys,pos=pos,keys_pos=keys_pos,prev_bus=prev_bus)
             # if display_graph_bool:
             # G.display_graph(display_flows = display_flows, name = 'Regret_success')
         except Exception as e:
             error_message = 'Optimal tactic is '+ optimal_tactic + '. Error in graph solving for regret calculation for tactic ' + tactic+ ' ...'
             # logger.warning(error_message)
             # traceback.print_exc()
-            error_traceback = traceback.format_exc()  # Get full traceback
+            #error_traceback = traceback.format_exc()  # Get full traceback
             # with open(self.__error_file_path, "a") as f:
             #     f.write('Error message: {}\n'.format(error_message))
             #     f.write('Error traceback: {}\n'.format(error_traceback))

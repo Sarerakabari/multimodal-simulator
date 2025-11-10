@@ -1,5 +1,5 @@
 from multimodalsim.simulator.vehicle import Stop
-
+import logging
 import matplotlib.pyplot as plt
 from collections import defaultdict
 from operator import itemgetter
@@ -13,7 +13,8 @@ import os
 import networkx as nx
 import traceback
 from matplotlib.lines import Line2D
-
+import sys
+logger = logging.getLogger(__name__)
 # print(matplotlib.__version__)
 
 class Graph_Node:
@@ -132,6 +133,8 @@ class Graph_Node:
         print("       level:  ", self.node_level)
         print("       bus:  ", self.node_bus)
         print('***NODE***')
+
+        
 
 class Graph_Edge:
     """ Class defining the edges in a graph.
@@ -335,6 +338,172 @@ class Graph:
         for edge in self.edges:
             edge.show_edge
         print('***GRAPH***')
+    
+    def count_paths_from_all_sources(self):
+        """
+        Compte le nombre de chemins distincts entre
+        chaque nœud de départ (stop_id=-1, bus != -1)
+        et le nœud d’arrivée (stop_id=0, bus=-1).
+        
+        Retourne un dict {start_node: nb_paths}.
+        """
+        # Identifier tous les départs et la cible
+        start_nodes = [n for n in self.nodes if n.node_stop_id == 0 and n.node_bus != -1]
+        target = next((n for n in self.nodes if n.node_stop_id == 0 and n.node_bus == -1), None)
+
+        if not start_nodes or target is None:
+            print("⚠️ Pas de départs valides ou cible introuvable.")
+            return {}
+
+        # Construire la liste d’adjacence
+        adj = {}
+        for e in self.edges:
+            adj.setdefault(e.origin, []).append(e.destination)
+
+        from functools import lru_cache
+
+        @lru_cache(maxsize=None)
+        def dfs(node):
+            if node == target:
+                return 1
+            return sum(dfs(neigh) for neigh in adj.get(node, []))
+
+        # Calculer pour chaque départ
+        results = {}
+        for start in start_nodes:
+            results[start] = dfs(start)
+
+        return results
+
+
+
+   
+
+
+        
+    
+
+    def save_edges_incident_to_nonzero_flow_nodes_differentiated_with_loop_and_tactics(graph, csv_path: str) -> None:
+        """
+        Enregistre dans un CSV les arêtes incidentes à des nœuds avec flux ≠ 0.
+        Indique :
+        - le côté où le flux est non nul ("origin", "destination", "both")
+        - si l’arête est une boucle (origine == destination)
+        - les indicateurs tactiques: speedup (sp) et skip_stop (ss)
+
+        Paramètres
+        ----------
+        graph : Graph
+            Graphe avec attributs des arêtes (Graph_Edge) et nœuds (Graph_Node).
+        csv_path : str
+            Chemin de sortie du fichier CSV.
+        """
+        import csv
+        with open(csv_path, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                # Origine
+                "o_stop_id", "o_ad", "o_time", "o_type", "o_flow", "o_bus",
+                # Destination
+                "d_stop_id", "d_ad", "d_time", "d_type", "d_flow", "d_bus",
+                # Arête
+                "weight", "capacity", "speedup", "skip_stop",
+                # Suppléments
+                "incident_side",  # "origin", "destination", "both"
+                "is_loop",        # True si o == d
+                "sp",             # edge.speedup
+                "ss"              # edge.skip_stop
+            ])
+
+            for edge in graph.edges:
+                o = edge.origin
+                d = edge.destination
+
+                # Flux ≠ 0 ?
+                o_nonzero = o.node_flow != 0
+                d_nonzero = d.node_flow != 0
+                if not (o_nonzero or d_nonzero):
+                    continue
+
+                # Côté du flux
+                if o_nonzero and d_nonzero:
+                    side = "both"
+                elif o_nonzero:
+                    side = "origin"
+                else:
+                    side = "destination"
+
+                is_loop = o == d
+
+                writer.writerow([
+                    o.node_stop_id,
+                    o.node_arrival_departure,
+                    o.node_time,
+                    o.node_type,
+                    o.node_flow,
+                    o.node_bus,
+
+                    d.node_stop_id,
+                    d.node_arrival_departure,
+                    d.node_time,
+                    d.node_type,
+                    d.node_flow,
+                    d.node_bus,
+
+                    edge.weight,
+                    edge.capacity,
+                    edge.speedup,
+                    edge.skip_stop,
+
+                    side,
+                    is_loop,
+                    edge.speedup,
+                    edge.skip_stop
+                ])
+
+
+
+    def save_graph_nodes_to_csv(graph, csv_path: str) -> None:
+        """
+        Sauvegarde les informations des nœuds d'un graphe dans un fichier CSV.
+        Ajoute le nombre d'arcs entrants et sortants pour chaque nœud.
+        
+        Paramètres
+        ----------
+        graph : Graph
+            Graphe contenant les objets Graph_Node.
+        csv_path : str
+            Chemin vers le fichier CSV de sortie.
+
+        """
+        import csv
+        from collections import Counter
+
+
+        # Compter les arcs sortants et entrants
+        outgoing_counts = Counter(edge.origin for edge in graph.edges)
+        incoming_counts = Counter(edge.destination for edge in graph.edges)
+
+        with open(csv_path, mode='w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "stop_id", "type", "flow", "bus", "ad", "time", 
+                "out_degree", "in_degree"
+            ])  # En-têtes
+            
+            for node in graph.nodes:
+                writer.writerow([
+                    node.node_stop_id,
+                    node.node_type,
+                    node.node_flow,
+                    node.node_bus,
+                    node.node_arrival_departure,  # "a" ou "d"
+                    node.node_time,               # temps du nœud
+                    outgoing_counts.get(node, 0), # arcs sortants
+                    incoming_counts.get(node, 0)  # arcs entrants
+                ])
+
+   
         
     def add_alighting_transfer_passenger_edge(self, arrival_node, alighting_transfer_node, walking_time = 0, stop_is_skipped = 0):
         alighting_transfer_node_time = alighting_transfer_node.node_time
@@ -890,22 +1059,25 @@ class Graph:
                         self.add_edge(node_exo, target_niveau, price)
         return
 
-    def convert_graph_to_model_format(self):
-        """Converts the graph G into a format that can be used by the optimization solver.
+    def convert_graph_to_model_format(self, keys=None, pos=None, keys_pos=None):
+        """
+        Converts the graph G into a format that can be used by the optimization solver.
+
         Inputs:
-            - G: Graph, the graph to convert
+            - keys: (optionnel) dictionnaire construit par build_flow_dicts_with_matching.
+                    Sera converti pour utiliser les indices de noeuds plutôt que les objets Graph_Node.
         Outputs:
-            - Vnew: set of all nodes (each node is a number 1,2,3 ...)
-            - Anew: set of all arcs
-            - snew: source node
-            - tnew: target node
-            - flows: exogenous flow at each node. example: flows[6]=+2
-            - ids: a dictionary that for each node gives its stop_id. example: ids[6]=46884
-            - node_dict: a dictionary that for each node number gives the corresponding Graph_Node object
-            - edge_dict: a dictionary that for each edge number gives the corresponding Graph_Edge object
-            - bus_dict: a dictionary that for each node number gives its bus trip_id. example: bus_dict[6]='2546781'
-         """
-        # Converting graph to model format
+            - Vnewset: set des noeuds (entiers)
+            - Anew: set des arcs (u,v,weight)
+            - snew: index du noeud source
+            - tnew: index du noeud cible
+            - flows: dict {i: flow_exogène}
+            - ids: dict {i: stop_id}
+            - node_dict: dict {i: Graph_Node}
+            - edge_dict: dict {(u,v,weight): Graph_Edge}
+            - bus_dict: dict {i: bus_id}
+            - keys_new: (si keys fourni) dict avec indices au lieu des objets
+        """
         V = self.nodes
         A = self.edges
         s = self.source
@@ -920,15 +1092,18 @@ class Graph:
         edge_dict = {}
         bus = {}
         sources = {}
+        
         puits = {}
         puits['t'] = {}
         puits['n'] = {}
+        
         for v in V: 
             Vnew[v] = i
             node_dict[i] = v
             stop_id = v.node_stop_id
             ids[i] = stop_id
             bus[i] = v.node_bus
+           
             if stop_id == 0 and v.node_bus !=- 1:
                 sources[v.node_bus] = v.node_time
             if v.node_type == 'puit' and v.node_arrival_departure=='a': #target node for non-transfer passengers
@@ -952,7 +1127,48 @@ class Graph:
         snew = Vnew[s]
         tnew = Vnew[t]
         Vnewset = set([Vnew[v] for v in V])
-        return(Vnewset, Anew, snew, tnew, flows, ids, node_dict, edge_dict, bus)
+        # 🔑 Conversion de keys si fourni
+        keys_new = None
+        if keys is not None:
+            keys_new = {}
+            pos_new = {}
+            keys_pos_new = {}
+            # arc d'embarquement réel
+            for bus_id, emb_node in pos.items():
+                pos_new[bus_id] = []
+                for node , e in emb_node.items():
+                        u, v = e.origin, e.destination
+                        if u in Vnew and v in Vnew:
+                           pos_new[bus_id].append((Vnew[u], Vnew[v], e.weight))
+
+            #registre les embarquements
+            for bus_id, emb_node in keys_pos.items():
+                keys_pos_new[bus_id] = []
+                for  e in emb_node:
+                        u, v = e.origin, e.destination
+                        if u in Vnew and v in Vnew:
+                           keys_pos_new[bus_id].append((Vnew[u], Vnew[v], e.weight))               
+            #registre des embarquement déberquemnt 
+            for bus_id, subdict in keys.items():
+                keys_new[bus_id] = {}
+                for neg_node, edges in subdict.items():
+                    if neg_node not in Vnew:
+                        continue
+                    neg_idx = Vnew[neg_node]
+                    keys_new[bus_id][neg_idx] = []
+                    for e in edges:
+                        u, v = e.origin, e.destination
+                        if u in Vnew and v in Vnew:
+                            keys_new[bus_id][neg_idx].append((Vnew[u], Vnew[v], e.weight))
+
+        if keys is not None:
+            return Vnewset, Anew, snew, tnew, flows, ids, node_dict, edge_dict, bus, keys_new,puits, sources,pos_new,keys_pos_new
+        else:
+            return Vnewset, Anew, snew, tnew, flows, ids, node_dict, edge_dict, bus
+
+    
+    
+
     
     def build_and_solve_model_from_graph(self,
                                      name,
@@ -962,7 +1178,10 @@ class Graph:
                                      keys = {},
                                      sources = {},
                                      puits = {},
-                                     extras = {}):
+                                     extras = {},
+                                     pos={},
+                                     keys_pos={},
+                                     prev_bus={}):
 
         """ 
         Function that takes a graph, information on buses and Origin/Destination pairs and returns the optimal solution of the arc-flow model.
@@ -984,22 +1203,50 @@ class Graph:
             - display_flows: dict, the passenger flow on each edge, used in the display_graph function.
             - runtime: float, the runtime of the optimization model
         """
+
         ### Convert graph to model format
-        V, A, s, t, flows, ids, node_dict, edge_dict, bus_dict = self.convert_graph_to_model_format()
+        V, A, s, t, flows, ids, node_dict, edge_dict, bus_dict, keys_new, puits,sources,pos_new,keys_pos_new = self.convert_graph_to_model_format(keys,pos,keys_pos)
+       
         #### Create optimization model'
         m = Graph.create_opt_model_from_graph_with_mip(V, A, s, t, flows, ids, name,
                                                         bus_dict, 
-                                                        savepath=savepath,
-                                                        out_of_bus_price=out_of_bus_price,
-                                                        keys=keys,
+                                                        savepath= savepath,
+                                                        out_of_bus_price= out_of_bus_price,
+                                                        keys= keys_new,
                                                         sources=sources,
-                                                        puits=puits,
-                                                        extras=extras)
+                                                        puits= puits,
+                                                        extras={},
+                                                        pos=pos_new, 
+                                                        keys_pos=keys_pos_new,
+                                                        prev_bus=prev_bus)
+        
+        #diagnose_infeasibility(m, savepath="output/model_debug.lp")
 
         #Solve
         runtime = timeit.default_timer()
         try:
             m.optimize()
+         
+            # status = m.status
+            # if status == OptimizationStatus.OPTIMAL:
+            #     print("✅ Une solution optimale a été trouvée")
+            # elif status == OptimizationStatus.FEASIBLE:
+            #     print("⚠️ Une solution réalisable a été trouvée (pas forcément optimale)")
+            # elif status == OptimizationStatus.NO_SOLUTION_FOUND:
+            #     print("❌ Pas de solution trouvée")
+            # elif status == OptimizationStatus.INFEASIBLE:
+            #     print("❌ Problème infaisable")
+            #     # ok, reasons = self.precheck_feasibility(verbo=True)
+            #     # if not ok:
+            #     #    # on log + on continue (si tu veux quand même tenter le solveur)
+            #     #     logger.warning("Precheck: potentiellement infaisable:\n" + "\n".join(" - "+r for r in reasons))
+            
+
+            # elif status == OptimizationStatus.UNBOUNDED:
+            #     print("⚠️ Modèle non borné")
+            # else:
+            #     print("⚠️ Statut inconnu:", status)
+           
         except Exception as e:
             error_traceback = traceback.format_exc()
             print('Traceback error:', error_traceback)
@@ -1022,7 +1269,8 @@ class Graph:
             # unew = (str)(u.node_stop_id)+' '+u.node_arrival_departure+' '+u.node_type+' '+(str)(u.node_time)
             # vnew = (str)(v.node_stop_id())+' '+v.node_arrival_departure+' '+v.node_type+' '+(str)(v.node_time)
             # print('Edge (',u1,',',v1,',',i,')', 'x=',x.x, 'y=',y.x)
-            display_flows[edge_dict[(u,v,i)]] = round(x.x)
+            valx = x.x if x.x is not None else 0  # ou autre valeur par défaut
+            display_flows[edge_dict[(u,v,i)]] = round(valx)
             # passenger_flows[(unew, vnew, i)] = (int)(x.x)
             bus_flows[edge_dict[(u,v,i)]]=round(y.x)
 
@@ -1149,6 +1397,12 @@ class Graph:
         Outputs:
             - G: the constructed graph
             """
+        
+        
+
+
+
+
         if time_step<2 and global_skip_stop_is_allowed: 
             return
         
@@ -1158,7 +1412,7 @@ class Graph:
                                                                                                         last_departure_times = last_departure_times,
                                                                                                         price = price,
                                                                                                         time_step = time_step)
-
+      
         ## Create a dict with all stops in the two bus trips
         stops_level, stops_dist, targets = G.create_stops_dict(bus_trips,
                                                                with_tactics = False)
@@ -1172,6 +1426,7 @@ class Graph:
 
         ## Create nodes and edges for each bus trip
         for (start_time, trip_id) in order:
+            #pas de tactique pour le premier bus
             if (start_time, trip_id) != order[0]:
                 with_tactics = False
             else:
@@ -1183,6 +1438,7 @@ class Graph:
             target_nodes[trip_id] = {}
             skip_stop_is_allowed = global_skip_stop_is_allowed
             speedup_factor = global_speedup_factor
+            # ajouter les sources secondaires 
             sources = G.add_source_node(sources, start_time, initial_flows[trip_id], trip_id, global_source_node)
 
             ## Create transfer nodes and get transfer data
@@ -1217,10 +1473,10 @@ class Graph:
                 travel_time = max(1, stop.arrival_time - prev_departure_time) ## dwell at previous stop. We need the dwell time to be non-null for the constraints in the MIP solver.
                 dwell = stop.departure_time - stop.arrival_time
                 prev_departure_time = stop.departure_time
-
+                # ajouter les puits
                 ## Add target node and the flow corresponding to passengers alighting at this stop without a transfer
                 target_nodes, od_d_dict = G.add_target_node(target_nodes, od_d_dict, trip_id, stop, start_time, l, d)
-
+                
                 ## In this modelization we want to separate transfers and normal alighting passengers
                 #  *** TRANSFER PASSENGERS ARE NOT INCLUDED IN THE NUMBER OF ALIGHTING PASSENGERS ***
                 # ***
@@ -1263,7 +1519,7 @@ class Graph:
                     else: 
                         skips = G.add_skip_stop_path(stop, travel_time, time_prev, last, skips, target_nodes, prev_node, no_tactics_arrival_node.node_time, walking_time, (stop_id in transfer_passengers), l, d, trip_id, skip_stop_is_allowed = skip_stop_is_allowed)
                 ## All bus paths are added
-
+                
                 ## Add arcs for passengers boarding without a transfer
                 min_departure_time = min([time for time in departs_current])
                 planned_departure_time = stop.planned_arrival_time - 60
@@ -1292,6 +1548,7 @@ class Graph:
                     edge_dep_plan = -1
                     planned_departure_node = -1
                 ## Add arcs for passengers boarding with a transfer
+                
                 new_transfer_nodes, exo_current, od_m_dict = G.add_boarding_transfer_passenger_edges(stop, trip_id,
                                                                                                     transfer_passengers,
                                                                                                     exo_current,
@@ -1334,7 +1591,7 @@ class Graph:
 
                 ## Add paths for passengers who missed the previous bus
                 times, last_exo, exo_current, departs_current = G.link_passengers_from_previous_bus(times, stop_id, last_exo, exo_current, departs_current, with_tactics = with_tactics)
-
+                
                 if j != len(bus_trips[trip_id])-1:
                     last_exo = G.finalize_graph_for_current_stop_with_tactics(times,
                                                                             no_tactics_departure_node,
@@ -1602,13 +1859,16 @@ class Graph:
                     else: 
                         times.append((new_transfer_node.node_time, new_transfer_node)) # The bus cannot depart from this node as it is before the first path arrival at the stop
         return times
+    
+
+    
 
     @staticmethod
     def create_opt_model_from_graph_with_mip(V,A,s,t,flows,ids, name='TestSolverMip',
                                             bus_dict = False,
                                             savepath = 'output',
                                             out_of_bus_price = 2,
-                                            keys={}, sources={}, puits={}, extras={}): 
+                                            keys={}, sources={}, puits={}, extras={},pos={},keys_pos={}, prev_bus={}): 
         """ Function that takes a graph, information on buses and Origin/Destination pairs and returns an arc-flow model to solve.
 
         Inputs: 
@@ -1632,52 +1892,56 @@ class Graph:
         Outputs: 
         Arc-flow model
         """
+    
+       
         #Initialize model
         m = Model(solver_name="CBC")
         m.verbose = 0
         m.solver_verbosity = 0
-        m.presolve = 1
+        m.presolve = 0
         m.store_search_progress_log = False
         m.seed = 42
         
         #Initialize Variables
         x = {(u,v,i): m.add_var(name='x({},{},{})'.format(u,v,i), var_type = INTEGER, lb=0, ub=100) for (u,v,i) in A}
-        y = {(u,v,i): m.add_var(name='y({},{},{})'.format(u,v,i), var_type = INTEGER, lb=0, ub=1) for (u,v,i) in A}
+        y = {(u,v,i): m.add_var(name='y({},{},{})'.format(u,v,i), var_type = BINARY) for (u,v,i) in A}
         if keys != {}:
-            prev_bus = {}
-            liste_temp = []
-            for bus in sources: 
-                liste_temp.append( (bus,sources[bus]))
-            liste_temp=sorted(liste_temp, key=itemgetter(1))
-            prev_bus[liste_temp[0][0]]=-1
-            for value in range(1,len(liste_temp)):
-                prev_bus[liste_temp[value][0]]=liste_temp[value-1][0]#dictionnary that gives the trip_id of the previous bus
+            # prev_bus = {}
+            # liste_temp = []
+            # for bus in sources: 
+            #     liste_temp.append( (bus,sources[bus]))
+            # liste_temp=sorted(liste_temp, key=itemgetter(1))
+            # prev_bus[liste_temp[0][0]]=-1
+            # for value in range(1,len(liste_temp)):
+            #     prev_bus[liste_temp[value][0]]=liste_temp[value-1][0]#dictionnary that gives the trip_id of the previous bus
             keys[-1] = {}
             V3 = copy.deepcopy(V)
-            V3.remove(t) #remove target, not included in this constraint. Remove all nodes with negative exogenous flow (treated in particular constraints)
-            V4 = set()# nodes with alighting transfer passengers (negative exogenous flow)
+            V3.remove(t)
+            
+           #remove target, not included in this constraint. Remove all nodes with negative exogenous flow (treated in particular constraints)
+           # V4 = set()# nodes with alighting transfer passengers (negative exogenous flow)
             V5 = set()# nodes with 'normal' alighting passengers (negative exogenous flow)
-            V6 = set()# nodes with alighting transfer passengers from previous buses (0 flow)
-            for trip in puits['t']:
-                for v in puits['t'][trip]:
-                    V4.add(v)
-                    V3.remove(v)
+            #V6 = set()# nodes with alighting transfer passengers from previous buses (0 flow)
+            # for trip in puits['t']:
+            #     for v in puits['t'][trip]:
+            #         V4.add(v)
+            #         V3.remove(v)
             for trip in puits['n']:
                 for v in puits['n'][trip]:
                     V5.add(v)
                     V3.remove(v)
-            for v in extras: 
-                V6.add(v)
-                V3.remove(v)
+            # for v in extras: 
+            #     V6.add(v)
+            #     V3.remove(v)
             indicator_arcs_set = set()
-            for k in extras:
-                for (u,v,i) in extras[k]:
-                    indicator_arcs_set.add((u, v, i))
-            for bus in keys: 
-                for k in keys[bus]:
-                    for (u, v, i) in keys[bus][k]:
+            # for k in extras:
+            #     for (u,v,i) in extras[k]:
+            #         indicator_arcs_set.add((u, v, i))
+            for bus in keys_pos: 
+                for (u, v, i)   in keys_pos[bus]:
                         indicator_arcs_set.add((u, v, i))
-            ind = {(u,v,i): m.add_var(name='ind({},{},{})'.format(u,v,i), var_type = INTEGER, lb = 0, ub = 1) for (u,v,i) in [(u, v, i) for (u, v, i) in indicator_arcs_set]}
+            
+            ind = {(u,v,i): m.add_var(name='ind({},{},{})'.format(u,v,i), var_type=BINARY) for (u,v,i) in [(u, v, i) for (u, v, i) in indicator_arcs_set]}
         if out_of_bus_price !=1 :
             z={(u,v,i): m.add_var(name='z({},{},{})'.format(u, v, i), var_type = INTEGER, lb = 0, ub = 100) for (u,v,i) in [(u, v, i) for (u, v, i) in A if i != 0 and ids[u] == ids[v]]}
         
@@ -1694,7 +1958,7 @@ class Graph:
         if keys == {}: 
             V.remove(t)
             for k in V:
-                m += xsum(x[u, v, i] for (u, v, i) in A if v == k) - xsum(x[u, v, i] for (u, v, i) in A if u == k) + flows[k] == 0, 'flow_cst'+str(k) 
+                m += xsum(x[u, v, i] for (u, v, i) in A if v == k) - xsum(x[u, v, i] for (u, v, i) in A if u == k ) + flows[k] == 0, 'flow_cst'+str(k) 
             V.add(t)
             V5 = set()
         ### 2nd case: we have O/D pairs. 
@@ -1703,25 +1967,38 @@ class Graph:
             for k in V3:# node without alighting passengers
                 m += xsum(x[u, v, i] for (u, v, i) in A if v == k) - xsum(x[u, v, i] for (u, v, i) in A if u == k) + flows[k] == 0, 'flow_cst'+str(k)
             
-            for k in V6:#alighting transfer passengers that missed their bus
-                ### if a passenger missed their bus, the alighting transfer demand is transferred to the next bus.
-                ### ici flows[k]=0 !
-                bus = bus_dict[k]
-                sum0 = xsum(x[u,v,i] for (u,v,i) in A if v==k)
-                sum1 = xsum((1-ind[u,v,i]) for (u,v,i) in extras[k])
-                m += sum0 - sum1 == 0, 'flow_cst_transferts_missed'+str(k)
+            # for k in V6:#alighting transfer passengers that missed their bus
+            #     ### if a passenger missed their bus, the alighting transfer demand is transferred to the next bus.
+            #     ### ici flows[k]=0 !
+            #     bus = bus_dict[k]
+            #     sum0 = xsum(x[u,v,i] for (u,v,i) in A if v==k)
+            #     sum1 = xsum((1-ind[u,v,i]) for (u,v,i) in extras[k])
+            #     m += sum0 - sum1 == 0, 'flow_cst_transferts_missed'+str(k)
 
-            for k in V4:#alighting transfer passengers 
-                ### if a passenger missed their bus, the alighting transfer demand is adapted to the real number of passengers that will get off here.
-                bus = bus_dict[k]
-                m += xsum(x[u,v,i] for (u,v,i) in A if v==k) + flows[k] + xsum((1-ind[u,v,i]) for (u,v,i) in keys[bus][k])==0, 'flow_cst_transferts'+str(k) 
+            # for k in V4:#alighting transfer passengers 
+            #     ### if a passenger missed their bus, the alighting transfer demand is adapted to the real number of passengers that will get off here.
+            #     bus = bus_dict[k]
+            #     m += xsum(x[u,v,i] for (u,v,i) in A if v==k) + flows[k] + xsum((1-ind[u,v,i]) for (u,v,i) in keys[bus][k])==0, 'flow_cst_transferts'+str(k) 
+            
+            # assure que le nombre de passagers montée est égal au flux positif
+            for bus_id, edges in pos.items():  
+                for (u, v, i) in edges:
+                    # On filtre les arcs indicateurs correspondants
+                    matching_ind_arcs = [(a, b, j) for (a, b, j) in indicator_arcs_set if a == u and b == v]
+
+                    # On ne crée la contrainte que s'il y a au moins un arc indicateur correspondant
+                    if matching_ind_arcs:
+                        m += x[u, v, i] - xsum(ind[a, b, j] for (a, b, j) in matching_ind_arcs) == 0, \
+                            f"ind_cst_max{u}{v}{i}"
+                   
                 
+
             for k in V5:#'normal' alighting passengers
                 bus=bus_dict[k]
                 id=ids[k]
-                bus_prev=prev_bus[bus_dict[k]]
+                bus_prev=prev_bus[bus]
                 if (k in keys[bus])==False: 
-                    keys[bus][k]=[]
+                     keys[bus][k]=[]
                 if bus_prev!=-1:
                     # This is NOT the first bus in the optimization horizon
                     # We need to retrieve the destinations of passengers that missed the previous bus
@@ -1746,13 +2023,18 @@ class Graph:
                     # This is the first bus in the optimization horizon.
                     # No passengers from previous bus to retrieve from previous.  
                     # This constraint takes into account if a passenger boarded the current bus or not, in order to adapt the destination node flow. 
-                    m += xsum(x[u,v,i] for (u,v,i) in A if v==k)+flows[k]+xsum((1-ind[u,v,i]) for (u,v,i) in keys[bus][k])==0, 'flow_cst'+str(k)
+                    m += xsum(x[u,v,i] for (u,v,i) in A if v==k)+flows[k]+xsum((1-ind[u,v,i]) for (u,v,i) in keys[bus][k])==0, 'flow_cst_cor'+str(k)
+
+
+               
                     
         # "Bus Flow" constraints
         compte_bus=[]
         for u in V:
             compte_bus.append(bus_dict[u])
+        
         compte_bus = len(np.unique(compte_bus))-1 #we don't count bus=-1 for the source and target nodes
+       
         V.remove(s)
         V.remove(t)
         for k in V: 
@@ -1779,18 +2061,32 @@ class Graph:
                     arcs[bus]={}
                     arcs[bus][(id1,id2)]=[(u,v,i)]
         for bus in arcs:
+            
+           
             for (id1,id2) in [(id1,id2) for (id1,id2) in arcs[bus] if id1!=id2]:
                 for (u,v,i) in [(u,v,i) for (u,v,i) in arcs[bus][(id1,id2)] if i!=0]:
+
                     m += x[u,v,i]-100*y[u,v,i]<=0,'bus_path_cst'+str(u)+str(v)+str(i) #if there are no passengers in the bus, x is equal to 0 bus y is equal to 1
         
         #### Indicator variable constraints 
         # 1) Ind=1 if x>0 and ind=0 otherwise. Used to see if a passenger boarded a bus or not.
         ### On peut limiter le nombre de variables aux arcs de depart !!!
         # Only needed if we have Origin/Destination pairs. 
-        if keys!={}:
-            for (u,v,i) in [(u,v,i) for (u,v,i) in indicator_arcs_set if i!=0]: 
-                m+=x[u,v,i]-100*ind[u,v,i]<=0,'ind_cst_max'+str(u)+str(v)+str(i)
-                m+=x[u,v,i]-ind[u,v,i]>=0,'ind_cst_min'+str(u)+str(v)+str(i)
+        # def get_var_for_uv(x, u, v):
+        #     """
+        #     Retourne la variable unique x[u,v,i], peu importe i.
+        #     Suppose qu'il existe exactement une variable pour ce couple (u,v).
+        #     """
+        #     for (uu, vv, i) in x:
+        #         if uu == u and vv == v:
+        #             return x[uu, vv, i]  # notation compacte
+        #     return None  # si aucun trouvé
+        
+        # if keys!={}:
+        #     for (u,v,j) in [(u,v,j) for (u,v,j) in indicator_arcs_set if j!=0]: 
+        #         var = get_var_for_uv(x, u, v)
+        #         m+=var-100*ind[u,v,j]<=0,'ind_cst_max'+str(u)+str(v)+str(i)
+        #         m+=var-ind[u,v,j]>=0,'ind_cst_min'+str(u)+str(v)+str(i)
 
         #2)z = x if y=1 and z=0 otherwise.
         # Only needed in the objective function if out_of_bus_price != 1
@@ -2417,3 +2713,601 @@ class Graph:
         plt.savefig(completenamepng)
         # plt.show()
         plt.close()
+
+    
+    def display_graph_temporal_layout_clean_labels(
+    G,
+    figsize=(16, 10),
+    node_size=500,
+    show_labels=True,
+    only_edges_incident_to_nonzero_flow=False
+):
+        """
+        Affiche un graphe temporel (x = temps, y = arrêt) avec :
+        - Nœuds en rose si node_flow ≠ 0 (non nul)
+        - Axe Y ordonné selon première apparition temporelle
+        - stop_id = -1 toujours en bas
+        - Si only_edges_incident_to_nonzero_flow=True :
+            * on affiche les arcs ENTRANTS et SORTANTS des nœuds de flow non nul
+            * on affiche les nœuds extrémités de ces arcs (même si leur flow = 0)
+        """
+        import matplotlib.pyplot as plt
+        import networkx as nx
+        import pandas as pd  # pour gérer NaN proprement
+
+        # --- Construction du DiGraph networkx avec attributs utiles ---
+        G_nx = nx.DiGraph()
+
+        for node in G.nodes:
+            label = f"{node.node_stop_id}\n{node.node_time}\n{node.node_type}"
+            G_nx.add_node(
+                node,
+                label=label,
+                stop_id=node.node_stop_id,
+                time=node.node_time,
+                type=node.node_type,
+                flow=getattr(node, "node_flow", 0)
+            )
+
+        for edge in G.edges:
+            G_nx.add_edge(edge.origin, edge.destination, weight=edge.weight)
+
+        # --- Axe Y : ordre temporel des arrêts ---
+        nodes_sorted_by_time = sorted(G_nx.nodes, key=lambda n: n.node_time)
+        stop_sequence = []
+        for n in nodes_sorted_by_time:
+            sid = n.node_stop_id
+            if sid not in stop_sequence:
+                stop_sequence.append(sid)
+
+        # Forcer -1 tout en bas (y = 0)
+        if -1 in stop_sequence:
+            stop_sequence.remove(-1)
+            stop_sequence.insert(0, -1)
+
+        stop_y_mapping = {sid: i for i, sid in enumerate(stop_sequence)}
+
+        # --- Positions (x = temps, y = rang stop) ---
+        pos = {n: (n.node_time, stop_y_mapping[n.node_stop_id]) for n in G_nx.nodes}
+
+        # --- Couleurs des nœuds : hotpink si flow ≠ 0, sinon selon type ---
+        def color_for(node):
+            flow = G_nx.nodes[node].get("flow", 0)
+            if pd.notna(flow) and flow > 0:
+                return "hotpink"
+            t = G_nx.nodes[node].get("type", "")
+            return {
+                "source": "green",
+                "puit": "red",
+                "transfer": "blue",
+                "normal": "gray",
+                "skip": "orange"
+            }.get(t, "black")
+
+        # --- Filtrage optionnel des arcs ---
+        nonzero_nodes = {
+            n for n in G_nx.nodes
+            if pd.notna(G_nx.nodes[n].get("flow", 0)) and G_nx.nodes[n].get("flow", 0) != 0
+        }
+
+        if only_edges_incident_to_nonzero_flow:
+            # Arcs ENTRANTS et SORTANTS des nœuds à flow non nul
+            edges_in  = list(G_nx.in_edges(nonzero_nodes))
+            edges_out = list(G_nx.out_edges(nonzero_nodes))
+            edges_to_draw = list({*edges_in, *edges_out})  # union sans doublons
+
+            # Nœuds = extrémités des arcs + nœuds non nuls isolés (s'il y en a)
+            nodes_to_draw = set()
+            for (u, v) in edges_to_draw:
+                nodes_to_draw.add(u)
+                nodes_to_draw.add(v)
+            nodes_to_draw |= nonzero_nodes
+
+            if not edges_to_draw and not nodes_to_draw:
+                print("Aucun nœud avec flow non nul et aucun arc entrant/sortant à afficher.")
+                return
+        else:
+            edges_to_draw = list(G_nx.edges)
+            nodes_to_draw = list(G_nx.nodes)
+
+        # --- Dessin ---
+        plt.figure(figsize=figsize)
+
+        node_colors = [color_for(n) for n in nodes_to_draw]
+        nx.draw_networkx_nodes(
+            G_nx, pos,
+            nodelist=list(nodes_to_draw),
+            node_color=node_colors,
+            node_size=node_size
+        )
+
+        nx.draw_networkx_edges(
+            G_nx, pos,
+            edgelist=edges_to_draw,
+            arrows=True,
+            arrowstyle="->",
+            arrowsize=10
+        )
+
+        if show_labels:
+            labels = {n: G_nx.nodes[n]["label"] for n in nodes_to_draw}
+            nx.draw_networkx_labels(G_nx, pos, labels=labels, font_size=7)
+
+        # Ticks de l'axe Y
+        plt.yticks(ticks=list(stop_y_mapping.values()), labels=list(stop_y_mapping.keys()))
+
+        nb_sources = len(getattr(G, "sources", []))
+        nb_puits = len(getattr(G, "targets", []))
+
+        title_base = f"Graphe temporel orienté — {nb_sources} sources, {nb_puits} puits"
+        if only_edges_incident_to_nonzero_flow:
+            title_base += " — (arcs entrants/sortants des nœuds à flow non nul)"
+        plt.title(title_base)
+
+        plt.xlabel("Temps (node_time)")
+        plt.ylabel("Arrêt (stop_id)")
+        plt.grid(True, which="both", linestyle="--", alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+    
+    def display_edges_for_stop(G, stop_id, figsize=(10, 6), node_size=500, show_labels=True):
+        """
+        Affiche uniquement les arêtes liées au stop_id donné :
+        - inclut tous les nœuds ayant node_stop_id == stop_id
+        - affiche les arêtes incidentes à ces nœuds
+        - l'axe Y sépare :
+            * arrivées (a) -> y=0
+            * départs (d) -> y=1
+            * nœuds avec flow > 0 -> y=3
+        """
+        import matplotlib.pyplot as plt
+        import networkx as nx
+        import pandas as pd
+
+        # --- Construire un sous-graphe filtré ---
+        G_nx = nx.DiGraph()
+        nodes_of_stop = [n for n in G.nodes if n.node_stop_id == stop_id]
+
+        if not nodes_of_stop:
+            print(f"Aucun nœud trouvé pour stop_id={stop_id}")
+            return
+
+        # Ajouter nœuds avec attributs
+        for node in nodes_of_stop:
+            label = f"{node.node_stop_id}\n{node.node_time}\n{node.node_arrival_departure}\nflow={node.node_flow}"
+            G_nx.add_node(
+                node,
+                label=label,
+                stop_id=node.node_stop_id,
+                time=node.node_time,
+                ad=node.node_arrival_departure,
+                flow=getattr(node, "node_flow", 0),
+                bus=node.node_bus
+            )
+
+        # Ajouter seulement les arêtes internes à ce stop_id
+        for edge in G.edges:
+            if edge.origin in nodes_of_stop and edge.destination in nodes_of_stop:
+                G_nx.add_edge(edge.origin, edge.destination, weight=edge.weight)
+
+        # --- Positionnement : X = temps, Y dépend du type ---
+        pos = {}
+        for n in G_nx.nodes:
+            if n.node_flow > 0:
+                y = 1.2
+            elif n.node_arrival_departure == "a":
+                y = 0
+            else:  # "d"
+                y = 1
+            pos[n] = (n.node_time, y)
+
+        # --- Couleurs ---
+        def color_for(node):
+            if node.node_flow > 0:
+                return "hotpink"  # mettre en évidence les nœuds à flow positif
+            return "blue" if node.node_arrival_departure == "a" else "orange"
+
+        # --- Dessin ---
+        plt.figure(figsize=figsize)
+        node_colors = [color_for(n) for n in G_nx.nodes]
+
+        nx.draw_networkx_nodes(
+            G_nx, pos,
+            nodelist=list(G_nx.nodes),
+            node_color=node_colors,
+            node_size=node_size
+        )
+
+        nx.draw_networkx_edges(
+            G_nx, pos,
+            edgelist=list(G_nx.edges),
+            arrows=True,
+            arrowstyle="->",
+            arrowsize=10
+        )
+
+        if show_labels:
+            labels = {n: G_nx.nodes[n]["label"] for n in G_nx.nodes}
+            nx.draw_networkx_labels(G_nx, pos, labels=labels, font_size=7)
+
+        # Axe Y : trois niveaux fixes
+        plt.yticks([0, 1, 3], ["Arrivée (a)", "Départ (d)", "Flow positif (>0)"])
+        plt.xlabel("Temps (node_time)")
+        plt.ylabel(f"stop_id = {stop_id}")
+        plt.title(f"Arêtes relatives au stop_id {stop_id}")
+        plt.grid(True, which="both", linestyle="--", alpha=0.3)
+        plt.tight_layout()
+        plt.show()
+
+
+
+        
+def get_equivalent_zero_flow_nodes(G):
+        """
+        Retourne tous les nœuds qui sont reliés à un nœud ayant un flux positif
+        et qui possèdent les mêmes caractéristiques (stop_id, bus, time, etc.)
+        sauf que leur flux est nul.
+
+        Paramètres
+        ----------
+        G : Graph
+            Instance du graphe
+
+        Retour
+        ------
+        list[Graph_Node]
+            Liste des nœuds équivalents avec flow = 0
+        """
+        results = []
+        positive_nodes = [n for n in G.nodes if n.node_flow > 0 and n.node_stop_id!=0]
+
+        for edge in G.edges:
+            # On regarde uniquement les voisins dans le sens origin -> destination
+            if edge.origin in positive_nodes:
+                src = edge.origin
+                for n in G.nodes:
+                    if (
+                        n != src
+                        and n.node_flow == 0
+                        and n.node_stop_id == src.node_stop_id
+                        and n.node_bus == src.node_bus
+                        and n.node_time == src.node_time
+                    ):
+                        results.append(n)
+
+
+        return list(set(results)), list(set(positive_nodes))  # suppression des doublons
+    
+    
+def remove_edges_from_zero_equiv_nodes(G):
+    """
+        Supprime du graphe G toutes les arêtes dont :
+        - l'origine est un nœud équivalent zéro (mêmes attributs qu'un nœud à flux positif, mais flow=0)
+        - ET dont la destination a le même stop_id que l'origine.
+    """
+    zero_equiv_nodes,positive_nodes = get_equivalent_zero_flow_nodes(G)  # réutilisation
+    to_remove = []
+
+    for edge in G.edges:
+        if edge.origin in zero_equiv_nodes:
+            if edge.destination.node_stop_id == edge.origin.node_stop_id:
+                if edge.destination.node_flow >= 0:  # ne pas toucher aux négatifs
+                    to_remove.append(edge)
+
+    # Supprimer les arêtes identifiées
+    for e in to_remove:
+        G.edges.remove(e)
+
+    print(f"✅ {len(to_remove)} arêtes supprimées (destinations à flow >= 0).")
+    return to_remove  # utile si tu veux voir lesquelles ont été supprimées
+
+
+def link_positive_to_future_departures_or_sink(G):
+    """
+    Relie chaque nœud positif (flow > 0, stop_id != 0) :
+      - Si un départ futur existe (même stop_id, ad='d', time > key.time) -> rien
+      - Sinon :
+          * Supprime toutes les arêtes incidentes à key
+          * Ajoute un nœud copie avec flow négatif
+          * Ajoute un arc (key -> copie) de poids 2160
+    """
+    positive_nodes = [n for n in G.nodes if n.node_flow > 0 and n.node_stop_id != 0]
+
+    for key in positive_nodes:
+        # Chercher les futurs départs
+        future_nodes = [
+            n for n in G.nodes
+            if n.node_stop_id == key.node_stop_id
+            and n.node_arrival_departure == "d"
+            and n.node_time > key.node_time
+        ]
+
+        if not future_nodes:  # aucun départ futur trouvé
+            # ---- Supprimer toutes les arêtes incidentes à key ----
+           
+
+            # ---- Créer un noeud copie (avec flow négatif) ----
+            from copy import deepcopy
+            copied_node = deepcopy(key)
+            copied_node.node_flow = - key.node_flow
+            G.add_node(copied_node)
+
+            # ---- Ajouter l'arête (key -> copie) ----
+            exists = any(e.origin == key and e.destination == copied_node for e in G.edges)
+            if not exists:
+                G.add_edge(key, copied_node, 2160)
+
+import copy
+
+def build_flow_dicts_with_matching(G, bus_trips):
+    """
+    Construit :
+      - keys : { bus_id : {neg_node: [edges embarquement copiés (FIFO)]}}
+      - pos_keys : { bus_id : {pos_node: edge de base}}
+      - keys_pos : { bus_id : {pos_node: [edges embarquement copiés FIFO, y compris non utilisés]}}
+
+    Contraintes :
+      * Le graphe G n'est PAS modifié.
+      * Chaque arête copiée conserve origine/destination de base_edge,
+        mais son poids est remplacé par un compteur global FIFO par bus.
+      * Chaque nœud positif doit avoir UNE SEULE arête dans pos_keys.
+      * Les embarquements pour un débarquement doivent provenir d'arrêts ≤ dans la séquence.
+      * keys_pos enregistre aussi les embarquements restants (passagers encore dans le bus à la fin).
+    """
+
+    def _fmt_node(n):
+        return (f"bus={n.node_bus}, stop={n.node_stop_id}, "
+                f"time={n.node_time}, ad={n.node_arrival_departure}, "
+                f"type={n.node_type}, flow={n.node_flow}")
+
+    # ---- 1) Construire pos_keys ----
+    pos_keys = {}
+    for bus_id, stops in bus_trips.items():
+        pos_nodes = [n for n in G.nodes if n.node_bus == bus_id and n.node_flow > 0]
+        pos_dict = {}
+
+        for node in pos_nodes:
+            if node.node_stop_id == 0:
+                out_edges = [e for e in G.edges if e.origin is node]
+                
+                pos_dict[node] = out_edges[0]
+            else:
+                candidates = [
+                    n for n in G.nodes
+                    if n.node_bus == node.node_bus
+                    and n.node_stop_id == node.node_stop_id
+                    and n.node_time == node.node_time
+                    and n.node_flow == 0
+                    and n.node_arrival_departure == node.node_arrival_departure
+                    and n.node_type==node.node_type
+                ]
+                # if len(candidates) != 1:
+                #     print( len(candidates))
+                #     print(_fmt_node(candidates[0]))
+                #     print(_fmt_node(candidates[1]))
+                #     raise ValueError("flow=0 candidat: incohérence pour " + _fmt_node(node))
+                target = candidates[0]
+                
+                edges = [e for e in G.edges if e.origin is node and e.destination is target]
+                if len(edges) == 0:
+                    
+                #     print(edges[0].weight)
+                #     print(edges[1].weight)
+                    print( len(candidates))
+                    print("edge pos->flow0: incohérence pour " + _fmt_node(node))
+                    raise ValueError("edge pos->flow0: incohérence pour " +  _fmt_node(target))
+                #if edges!=[]:
+                pos_dict[node] = edges[0]
+
+        pos_keys[bus_id] = pos_dict
+
+    # ---- 2) Construire keys et keys_pos ----
+    keys = {}
+    keys_pos = {}
+
+    for bus_id, stops in bus_trips.items():
+        keys[bus_id] = {}
+        keys_pos[bus_id] = {}
+
+        # ordre des arrêts de ce bus
+        stop_order = {sid: i for i, sid in enumerate(stops)}
+
+        # Trier les nœuds positifs et négatifs par séquence d'arrêt (pas par temps)
+        pos_nodes_sorted = sorted(
+            [n for n in pos_keys[bus_id].keys()],
+            key=lambda n: stop_order.get(n.node_stop_id, 1e9)
+        )
+        neg_nodes_sorted = sorted(
+            [n for n in G.nodes if n.node_bus == bus_id and n.node_flow < 0 and n.node_type == "puit"],
+            key=lambda n: stop_order.get(n.node_stop_id, 1e9)
+        )
+
+        # Initialisation des structures
+        remaining = {n: n.node_flow for n in pos_nodes_sorted}
+        order_counter = 0
+        for pos in pos_nodes_sorted:
+            keys_pos[bus_id] = []
+
+        # 2a) Associer embarquements aux débarquements (keys)
+        for neg in neg_nodes_sorted:
+            keys[bus_id][neg] = []
+            passengers_to_assign = abs(neg.node_flow)
+
+            for pos in pos_nodes_sorted:
+                # On n’utilise que les embarquements à des arrêts antérieurs ou égaux
+                if stop_order.get(pos.node_stop_id, 1e9) > stop_order.get(neg.node_stop_id, 1e9):
+                    break
+
+                while remaining[pos] > 0 and passengers_to_assign > 0:
+                    order_counter += 1
+                    remaining[pos] -= 1
+                    passengers_to_assign -= 1
+
+                    base_edge = pos_keys[bus_id][pos]
+                    copied_edge = Graph_Edge(
+                        origin=base_edge.origin,
+                        dest=base_edge.destination,
+                        weight=order_counter,
+                        capacity=base_edge.capacity,
+                        sp=base_edge.speedup,
+                        ss=base_edge.skip_stop
+                    )
+                    # n'enregistre pas les arc d'embarquement du flux initiale
+                    if pos.node_stop_id != 0 :
+                        # associer à neg_node et pos_node
+                        keys[bus_id][neg].append(copied_edge)
+                        keys_pos[bus_id].append(copied_edge)
+
+                if passengers_to_assign == 0:
+                    break
+
+            if passengers_to_assign > 0:
+                raise ValueError(
+                    f"Bus {bus_id}: pas assez de passagers embarqués avant stop {neg.node_stop_id} "
+                    f"pour couvrir le flux négatif {neg.node_flow} à {_fmt_node(neg)}"
+                )
+
+        # 2b) Ajouter les embarquements restants (non utilisés) dans keys_pos
+        for pos in pos_nodes_sorted:
+            while remaining[pos] > 0:
+                order_counter += 1
+                remaining[pos] -= 1
+
+                base_edge = pos_keys[bus_id][pos]
+                copied_edge = Graph_Edge(
+                    origin=base_edge.origin,
+                    dest=base_edge.destination,
+                    weight=order_counter,
+                    capacity=base_edge.capacity,
+                    sp=base_edge.speedup,
+                    ss=base_edge.skip_stop
+                )
+                if pos.node_stop_id != 0 :
+                # embarquement sans débarquement associé
+                    keys_pos[bus_id].append(copied_edge)
+
+    return keys, pos_keys, keys_pos
+
+
+
+
+def show_keys(keys):
+    """
+    Affiche le dictionnaire keys de manière lisible :
+      - bus_id
+        - neg_node (descente)
+          -> edges embarquement associés avec poids FIFO
+    """
+    for bus_id, neg_dict in keys.items():
+        print(f"\n=== Bus {bus_id} ===")
+        for neg_node, edges in neg_dict.items():
+            print(f"  Débarquement stop={neg_node.node_stop_id}, "
+                  f"time={neg_node.node_time}, flow={neg_node.node_flow}")
+            for e in edges:
+                print(f"    Embarqué stop={e.origin.node_stop_id}, "
+                      f"time={e.origin.node_time}, poids(FIFO)={e.weight}")
+
+
+
+
+
+def remove_empty_puits(G):
+    """
+    Supprime du graphe G tous les nœuds de type 'puit' ayant un flow nul,
+    sauf s'il :
+      1) est impliqué dans un arc de poids >= 3600, ou
+      2) existe un autre puit (d’un autre bus) au même arrêt ayant un flow négatif.
+    """
+
+    # Identifier les puits à flow nul et ceux valides (flow < 0)
+    puits_to_remove = [n for n in G.nodes if n.node_type == "puit" and n.node_flow == 0]
+    puits_valides = [n for n in G.nodes if n.node_type == "puit" and n.node_flow < 0]
+
+    for node in puits_to_remove:
+        # --- Condition 1 : vérifier si un autre puit valide existe au même arrêt (même stop_id)
+        has_equivalent_valid = any(
+            (p.node_stop_id == node.node_stop_id) and (p.node_bus != node.node_bus) 
+            for p in puits_valides
+        )
+        if has_equivalent_valid:
+            # Ne pas supprimer, car un autre bus a un puit valide à ce même arrêt
+            if ((node.node_arrival_departure!= 'd')):
+                continue
+
+        # --- Condition 2 : vérifier si lié à un arc de poids 3600
+        has_arc_3600 = any(
+            e.weight >= 3600 and (e.origin == node or e.destination == node)
+            for e in G.edges
+        )
+
+        if not has_arc_3600:
+            # Supprimer les arêtes incidentes
+            incident_edges = [e for e in G.edges if e.origin == node or e.destination == node]
+            for e in incident_edges:
+                if e in G.edges:
+                    G.edges.remove(e)
+
+            # Supprimer le nœud
+            if node in G.nodes:
+                G.nodes.remove(node)
+
+
+from mip import OptimizationStatus
+
+def diagnose_infeasibility(m, savepath="model.lp"):
+    """
+    Vérifie si le modèle est infaisable.
+    - Sauvegarde le modèle en .lp si infaisable
+    - Affiche un résumé des contraintes ajoutées par familles
+    """
+
+    status = m.optimize()
+
+    if status == OptimizationStatus.INFEASIBLE:
+        print("\n🚨 Modèle infaisable détecté !")
+        print(f"Modèle exporté dans {savepath} pour analyse avec Gurobi/CPLEX.")
+
+        # Exporter le modèle
+        m.write(savepath)
+
+        # Diagnostic par familles de contraintes
+        constr_families = {
+            "flow": 0,
+            "bus_flow": 0,
+            "source_bus_flow": 0,
+            "target_bus_flow": 0,
+            "bus_path": 0,
+            "ind_cst": 0,
+            "z_cst": 0,
+            "other": 0
+        }
+
+        for c in m.constrs:
+            cname = c.name.lower() if c.name else ""
+            if "flow_cst" in cname:
+                constr_families["flow"] += 1
+            elif "bus_flow_cst" in cname:
+                constr_families["bus_flow"] += 1
+            elif "source_bus_flow_cst" in cname:
+                constr_families["source_bus_flow"] += 1
+            elif "target_bus_flow_cst" in cname:
+                constr_families["target_bus_flow"] += 1
+            elif "bus_path_cst" in cname:
+                constr_families["bus_path"] += 1
+            elif "ind_cst" in cname:
+                constr_families["ind_cst"] += 1
+            elif "z_cst" in cname:
+                constr_families["z_cst"] += 1
+            else:
+                constr_families["other"] += 1
+
+        print("\n📊 Contraintes par familles :")
+        for fam, count in constr_families.items():
+            print(f"  {fam:20s} : {count}")
+
+        print("\n👉 Analyse recommandée :")
+        print("   1. Charger le modèle .lp dans Gurobi/CPLEX pour un IIS.")
+        print("   2. Vérifier si certaines familles (flow, bus_flow, etc.) semblent en conflit.")
+    else:
+        print("\n✅ Modèle résolu avec statut :", status)

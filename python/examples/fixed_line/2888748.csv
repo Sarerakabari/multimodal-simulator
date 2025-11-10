@@ -1,0 +1,5 @@
+stop_id,arrival_time,departure_time,min_departure_time,cumulative_distance,planned_arrival_time,planned_departure_time_from_origin,nb_to_board,nb_to_alight,skip_stop,speedup,boarded_passengers_ids,passengers_to_board_ids,boarding_passenger_ids,alighting_passenger_ids,alighting_passengers_ids
+41958,57211,57219,,24.907,57239,53340,0,0,0,0,[],[],[],[],[]
+41937,57251,57273,,25.203,57300,53340,0,0,0,0,[],[],[],[],[]
+43147,57407,57413,,25.552,57377,53340,0,0,0,0,[],[],[],[],[]
+43148,57431,57447,,25.75,57421,53340,0,1,0,0,[],[],[],['4883C4231ECAEAF0FCEC247BA4755E975A088892_6937'],[]

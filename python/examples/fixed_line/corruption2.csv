@@ -1,0 +1,4 @@
+o_stop_id,o_ad,o_time,o_type,o_flow,o_bus,d_stop_id,d_ad,d_time,d_type,d_flow,d_bus,weight,capacity,speedup,skip_stop,incident_side,is_loop
+-1,d,52229,normal,0,-1,0,d,52230,normal,1,2890319,1,10000,0,0,destination,False
+0,d,52230,normal,1,2890319,41946,a,52308,normal,0,2890319,78,10000,0,0,origin,False
+41946,d,52320,normal,1,2890319,41946,d,52320,normal,0,2890319,1,10000,0,0,origin,False

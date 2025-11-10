@@ -1,0 +1,2 @@
+service_id,date,exception_type
+Dim,20191110,1

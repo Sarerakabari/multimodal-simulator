@@ -10,7 +10,9 @@ import networkx as nx
 
 import os.path
 import sys
-sys.path.insert(1, r"C:\Users\kklau\Desktop\Simulator")
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+project_root = os.path.normpath(os.path.join(current_dir,'..', '..','..')) 
+sys.path.insert(0, project_root)
 
 from multimodalsim.config.data_reader_config import DataReaderConfig
 from multimodalsim.simulator.network import Node
@@ -535,7 +537,7 @@ class GTFSReader(DataReader):
         """ This function to check if the stop times are in the right order.
         Errors may occur in the data and this function is used to detect them."""
         # Read dictionnary with stop times by route.
-        completename = os.path.join("data","fixed_line","gtfs","test_trip_dir.json")
+        completename = os.path.join(project_root,"data","fixed_line","gtfs","test_trip_dir.json")
         with open(completename) as f:
             stop_order_by_route_and_direction = json.load(f)
         f.close()

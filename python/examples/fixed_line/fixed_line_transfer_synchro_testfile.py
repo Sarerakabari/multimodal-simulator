@@ -2,11 +2,13 @@
 ### BEGINNING OF PARAMETERS ###
 import os
 import traceback
-gtfs_folder_path = os.path.join("data","fixed_line","gtfs","gtfs2019-11-25-LargeInstanceAll")
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+project_root = os.path.normpath(os.path.join(current_dir,'..', '..','..'))
+gtfs_folder_path = os.path.join(project_root,"data","fixed_line","gtfs","gtfs2019-11-01-Test_de_comparaison_modeles")
 requests_file_path = os.path.join(gtfs_folder_path,"requests.csv")
-output_folder_name = "gtfs2019-11-25_LargeInstanceAll"
-routes_to_optimize_names =  ['144E', '144O', '20E', '20O', '222E', '222O', '22E', '22O', '24E', '24O', '252E', '252O', '26E', '26O', '42E', '42O', '52E', '52O', '56E', '56O', '60E', '60O', '66E', '66O', '70E', '70O', '74E', '74O', '76E', '76O', '942E', '942O', '151S', '151N', '17S', '17N', '27S', '27N', '33S', '33N', '37S', '37N', '41S', '41N', '43S', '43N', '45S', '45N', '46S', '46N', '55S', '55N', '61S', '61N', '63S', '63N', '65S', '65N', '901S', '901N', '902S', '902N', '903S', '903N', '925S', '925N']
-algo = 0
+output_folder_name = "gtfs2019-11-01_Test_de_comparaison_modeles_output"
+routes_to_optimize_names =  ["70E","70O"]
+algo =3
 sp = False
 ss = False
 is_corridor = False
@@ -17,8 +19,9 @@ import sys
 import time
 import logging
 sys.path.append(os.path.abspath('../../..'))
-sys.path.append(r"C:\Users\kklau\Desktop\Simulator\python\examples")
-sys.path.append(r"/home/kollau/Recherche_Kolcheva/Simulator/python/examples")
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+sys_dir=os.path.normpath(os.path.join(current_dir,'..'))
+sys.path.insert(0, sys_dir)
 from stl_gtfs_transfer_synchro import stl_gtfs_transfer_synchro_simulator
 # Setup the logger
 logging_level = logging.WARNING
@@ -26,7 +29,7 @@ logging_level = logging.WARNING
 start_time=time.time()
 print('Begin testing...')
 coordinates_file_path = None
-freeze_interval = 1
+freeze_interval = 0
 try: 
     stl_gtfs_transfer_synchro_simulator(
                         gtfs_folder_path=gtfs_folder_path,

@@ -1,4 +1,11 @@
 import logging  # Required to modify the log level
+import os
+import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))  # ...\examples
+sys_dir=os.path.normpath(os.path.join(current_dir,'..'))
+root_project=os.path.normpath(os.path.join(current_dir,'..','..'))
+sys.path.insert(0, sys_dir)
 from multimodalsim.__main__ import extract_simulation_output
 from multimodalsim.observer.environment_observer import \
     StandardEnvironmentObserver
@@ -13,8 +20,8 @@ from multimodalsim.simulator.coordinates import CoordinatesFromFile, Coordinates
 from multimodalsim.simulator.simulation import Simulation
 import sys
 
-def stl_gtfs_transfer_synchro_simulator(gtfs_folder_path=os.path.join("data","fixed_line","gtfs","gtfs-generated-small"),
-                       requests_file_path=os.path.join("data","fixed_line","gtfs","gtfs-generated-small","requests.csv"),
+def stl_gtfs_transfer_synchro_simulator(gtfs_folder_path=os.path.join(root_project,"data","fixed_line","gtfs","gtfs-generated-small"),
+                       requests_file_path=os.path.join(root_project,"data","fixed_line","gtfs","gtfs-generated-small","requests.csv"),
                        coordinates_file_path=None,
                        routes_to_optimize_names = [],
                        ss = False,
@@ -26,7 +33,7 @@ def stl_gtfs_transfer_synchro_simulator(gtfs_folder_path=os.path.join("data","fi
                        is_from_smartcard_data = True,
                        is_corridor = False,
                        transfer_hubs = []):
-    sys.path.append(r"C:\Users\kklau\Desktop\Simulator\python\examples")
+    sys.path.append(current_dir)
     sys.path.append(r"/home/kollau/Recherche_Kolcheva/Simulator/python/examples")
     sys.path.append(os.path.abspath('../../..'))
     # To modify the log level (at INFO, by default)
@@ -62,7 +69,7 @@ def stl_gtfs_transfer_synchro_simulator(gtfs_folder_path=os.path.join("data","fi
     routes_to_optimize_names = routes_to_optimize_names if routes_to_optimize_names!=[] else list(set([vehicle.route_name for vehicle in vehicles]))
     
     # Create the output folder
-    output_folder_path = os.path.join("output","fixed_line","gtfs", output_folder_name)
+    output_folder_path = os.path.join(root_project,"output","fixed_line","gtfs", output_folder_name)
     output_folder_path = get_output_subfolder(output_folder_path, algo, ss, sp, routes_to_optimize_names, is_from_smartcard_data)
     print(output_folder_path)
 
